@@ -1,11 +1,35 @@
-import React, { useState, useEffect } from 'react';
-import { TrendingUp, DollarSign, ShoppingCart, Users, BarChart3, Calendar, Filter, Settings, Building2, Plus, CreditCard, Lightbulb, Zap, Target, Percent, Receipt, TrendingDown, ChevronRight, Eye, EyeOff, ArrowUp, ArrowDown, Minus } from 'lucide-react';
-import { useRestaurant } from '../../hooks/useRestaurant';
-import { useDateFilter } from '../../hooks/useDateFilter';
-import { DateFilterSelector } from '../../components/Common/DateFilterSelector';
-import { supabase } from '../../lib/supabase';
-import { ComparisonCard } from '../../components/Dashboard/ComparisonCard';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from "react";
+import {
+  TrendingUp,
+  DollarSign,
+  ShoppingCart,
+  Users,
+  BarChart3,
+  Calendar,
+  Filter,
+  Settings,
+  Building2,
+  Plus,
+  CreditCard,
+  Lightbulb,
+  Zap,
+  Target,
+  Percent,
+  Receipt,
+  TrendingDown,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  ArrowUp,
+  ArrowDown,
+  Minus,
+} from "lucide-react";
+import { useRestaurant } from "../../hooks/useRestaurant";
+import { useDateFilter } from "../../hooks/useDateFilter";
+import { DateFilterSelector } from "../../components/Common/DateFilterSelector";
+import { supabase } from "../../lib/supabase";
+import { ComparisonCard } from "../../components/Dashboard/ComparisonCard";
+import { Link, useNavigate } from "react-router-dom";
 
 interface Sale {
   id: string;
@@ -21,7 +45,7 @@ interface Expense {
   id: string;
   data: string;
   categoria: string;
-  tipo: 'fixa' | 'variavel' | 'marketing' | 'taxa_automatica';
+  tipo: "fixa" | "variavel" | "marketing" | "taxa_automatica";
   valor: number;
 }
 
@@ -48,14 +72,18 @@ interface MonthlyData {
 
 export const Dashboard: React.FC = () => {
   const { restaurant } = useRestaurant();
-  const { filterType, setFilterType, getDateRange, getFilterLabel } = useDateFilter();
-  
+  const { filterType, setFilterType, getDateRange, getFilterLabel } =
+    useDateFilter();
+  const navigate = useNavigate();
+
   const [sales, setSales] = useState<Sale[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [benchmarkData, setBenchmarkData] = useState<BenchmarkData | null>(null);
+  const [benchmarkData, setBenchmarkData] = useState<BenchmarkData | null>(
+    null
+  );
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [region, setRegion] = useState<string>('');
+  const [region, setRegion] = useState<string>("");
 
   // Estados para controlar seções expandidas - TODAS VISÍVEIS POR PADRÃO
   const [expandedSections, setExpandedSections] = useState({
@@ -63,16 +91,16 @@ export const Dashboard: React.FC = () => {
     custos: true,
     rentabilidade: true,
     comparativo: true,
-    canais: true
+    canais: true,
   });
 
   // Quick filter buttons - MUDANÇA: "hoje" para "ontem"
   const quickFilters = [
-    { type: 'ontem' as const, label: 'Ontem' },
-    { type: '7dias' as const, label: '7 dias' },
-    { type: 'mes_atual' as const, label: 'Este mês' },
-    { type: 'mes_anterior' as const, label: 'Mês anterior' },
-    { type: 'proximo_mes' as const, label: 'Próximo mês' }
+    { type: "ontem" as const, label: "Ontem" },
+    { type: "7dias" as const, label: "7 dias" },
+    { type: "mes_atual" as const, label: "Este mês" },
+    { type: "mes_anterior" as const, label: "Mês anterior" },
+    { type: "proximo_mes" as const, label: "Próximo mês" },
   ];
 
   useEffect(() => {
@@ -89,35 +117,35 @@ export const Dashboard: React.FC = () => {
       setIsLoading(false);
       return;
     }
-    
+
     setIsLoading(true);
     try {
       const { start, end } = getDateRange();
-      
+
       // Buscar vendas
       const { data: salesData, error: salesError } = await supabase
-        .from('sales')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .gte('data', start)
-        .lte('data', end)
-        .order('created_at', { ascending: false });
+        .from("sales")
+        .select("*")
+        .eq("restaurant_id", restaurant.id)
+        .gte("data", start)
+        .lte("data", end)
+        .order("created_at", { ascending: false });
 
       if (salesError) throw salesError;
-      
+
       setSales(salesData || []);
 
       // Buscar despesas
       const { data: expensesData, error: expensesError } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .gte('data', start)
-        .lte('data', end)
-        .order('created_at', { ascending: false });
+        .from("expenses")
+        .select("*")
+        .eq("restaurant_id", restaurant.id)
+        .gte("data", start)
+        .lte("data", end)
+        .order("created_at", { ascending: false });
 
       if (expensesError) throw expensesError;
-      
+
       setExpenses(expensesData || []);
 
       // Buscar dados históricos para comparativo mensal (últimos 6 meses)
@@ -125,19 +153,21 @@ export const Dashboard: React.FC = () => {
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
       sixMonthsAgo.setDate(1);
 
-      const { data: historicalSales, error: historicalSalesError } = await supabase
-        .from('sales')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .gte('data', sixMonthsAgo.toISOString().split('T')[0])
-        .order('data', { ascending: true });
+      const { data: historicalSales, error: historicalSalesError } =
+        await supabase
+          .from("sales")
+          .select("*")
+          .eq("restaurant_id", restaurant.id)
+          .gte("data", sixMonthsAgo.toISOString().split("T")[0])
+          .order("data", { ascending: true });
 
-      const { data: historicalExpenses, error: historicalExpensesError } = await supabase
-        .from('expenses')
-        .select('*')
-        .eq('restaurant_id', restaurant.id)
-        .gte('data', sixMonthsAgo.toISOString().split('T')[0])
-        .order('data', { ascending: true });
+      const { data: historicalExpenses, error: historicalExpensesError } =
+        await supabase
+          .from("expenses")
+          .select("*")
+          .eq("restaurant_id", restaurant.id)
+          .gte("data", sixMonthsAgo.toISOString().split("T")[0])
+          .order("data", { ascending: true });
 
       if (!historicalSalesError && !historicalExpensesError) {
         processMonthlyData(historicalSales || [], historicalExpenses || []);
@@ -145,15 +175,15 @@ export const Dashboard: React.FC = () => {
 
       // Buscar dados de benchmark usando a função
       try {
-        const { data: benchmarkResult, error: benchmarkError } = await supabase
-          .rpc('get_benchmark_data', {
+        const { data: benchmarkResult, error: benchmarkError } =
+          await supabase.rpc("get_benchmark_data", {
             restaurant_cidade: restaurant.cidade,
             restaurant_estado: restaurant.estado,
-            restaurant_categoria: restaurant.categoria_culinaria
+            restaurant_categoria: restaurant.categoria_culinaria,
           });
 
         if (benchmarkError) {
-          console.error('Error fetching benchmark data:', benchmarkError);
+          console.error("Error fetching benchmark data:", benchmarkError);
         } else if (benchmarkResult && benchmarkResult.length > 0) {
           setBenchmarkData(benchmarkResult[0]);
         } else {
@@ -167,11 +197,11 @@ export const Dashboard: React.FC = () => {
             taxa_media_venda: 15.0,
             gasto_marketing_medio: 5.0,
             total_restaurantes: 100,
-            fonte: 'simulado_default'
+            fonte: "simulado_default",
           });
         }
       } catch (error) {
-        console.error('Error with benchmark data:', error);
+        console.error("Error with benchmark data:", error);
         // Dados de benchmark simulados para quando houver erro
         setBenchmarkData({
           ticket_medio: 35.0,
@@ -182,31 +212,30 @@ export const Dashboard: React.FC = () => {
           taxa_media_venda: 15.0,
           gasto_marketing_medio: 5.0,
           total_restaurantes: 100,
-          fonte: 'simulado_fallback'
+          fonte: "simulado_fallback",
         });
       }
 
       // Buscar região
       try {
         const { data: regionData } = await supabase
-          .from('regions')
-          .select('nome')
-          .contains('estados', [restaurant.estado])
-          .eq('ativo', true)
+          .from("regions")
+          .select("nome")
+          .contains("estados", [restaurant.estado])
+          .eq("ativo", true)
           .limit(1);
 
         if (regionData && regionData.length > 0) {
           setRegion(regionData[0].nome);
         } else {
-          setRegion('Sudeste'); // Fallback
+          setRegion("Sudeste"); // Fallback
         }
       } catch (error) {
-        console.error('Error fetching region:', error);
-        setRegion('Sudeste'); // Fallback em caso de erro
+        console.error("Error fetching region:", error);
+        setRegion("Sudeste"); // Fallback em caso de erro
       }
-
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      console.error("Error fetching dashboard data:", error);
     } finally {
       setIsLoading(false);
     }
@@ -214,29 +243,36 @@ export const Dashboard: React.FC = () => {
 
   const processMonthlyData = (salesData: Sale[], expensesData: Expense[]) => {
     const monthlyMap = new Map<string, MonthlyData>();
-    
+
     // Inicializar últimos 6 meses
     for (let i = 5; i >= 0; i--) {
       const date = new Date();
       date.setMonth(date.getMonth() - i);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      const monthName = date.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
-      
+      const monthKey = `${date.getFullYear()}-${String(
+        date.getMonth() + 1
+      ).padStart(2, "0")}`;
+      const monthName = date.toLocaleDateString("pt-BR", {
+        month: "short",
+        year: "numeric",
+      });
+
       monthlyMap.set(monthKey, {
         month: monthKey,
         monthName,
         revenue: 0,
         orders: 0,
         ticket: 0,
-        expenses: 0
+        expenses: 0,
       });
     }
 
     // Processar vendas
-    salesData.forEach(sale => {
-      const saleDate = new Date(sale.data + 'T00:00:00');
-      const monthKey = `${saleDate.getFullYear()}-${String(saleDate.getMonth() + 1).padStart(2, '0')}`;
-      
+    salesData.forEach((sale) => {
+      const saleDate = new Date(sale.data + "T00:00:00");
+      const monthKey = `${saleDate.getFullYear()}-${String(
+        saleDate.getMonth() + 1
+      ).padStart(2, "0")}`;
+
       if (monthlyMap.has(monthKey)) {
         const monthData = monthlyMap.get(monthKey)!;
         monthData.revenue += sale.valor_bruto;
@@ -245,10 +281,12 @@ export const Dashboard: React.FC = () => {
     });
 
     // Processar despesas
-    expensesData.forEach(expense => {
-      const expenseDate = new Date(expense.data + 'T00:00:00');
-      const monthKey = `${expenseDate.getFullYear()}-${String(expenseDate.getMonth() + 1).padStart(2, '0')}`;
-      
+    expensesData.forEach((expense) => {
+      const expenseDate = new Date(expense.data + "T00:00:00");
+      const monthKey = `${expenseDate.getFullYear()}-${String(
+        expenseDate.getMonth() + 1
+      ).padStart(2, "0")}`;
+
       if (monthlyMap.has(monthKey)) {
         const monthData = monthlyMap.get(monthKey)!;
         monthData.expenses += expense.valor;
@@ -256,8 +294,9 @@ export const Dashboard: React.FC = () => {
     });
 
     // Calcular ticket médio
-    monthlyMap.forEach(monthData => {
-      monthData.ticket = monthData.orders > 0 ? monthData.revenue / monthData.orders : 0;
+    monthlyMap.forEach((monthData) => {
+      monthData.ticket =
+        monthData.orders > 0 ? monthData.revenue / monthData.orders : 0;
     });
 
     setMonthlyData(Array.from(monthlyMap.values()));
@@ -269,34 +308,59 @@ export const Dashboard: React.FC = () => {
   const averageTicket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
   // Calcular métricas das despesas POR CATEGORIA (não por tipo)
-  const totalExpenses = expenses.reduce((sum, expense) => sum + expense.valor, 0);
-  
+  const totalExpenses = expenses.reduce(
+    (sum, expense) => sum + expense.valor,
+    0
+  );
+
   // CORRIGIDO: Despesas por categoria específica
-  const cmvExpenses = expenses.filter(e => e.categoria === 'CMV').reduce((sum, expense) => sum + expense.valor, 0);
-  const impostosExpenses = expenses.filter(e => e.categoria === 'Impostos').reduce((sum, expense) => sum + expense.valor, 0);
-  const despesasVendasExpenses = expenses.filter(e => e.categoria === 'Despesas com Vendas').reduce((sum, expense) => sum + expense.valor, 0);
-  const cmoExpenses = expenses.filter(e => e.categoria === 'CMO').reduce((sum, expense) => sum + expense.valor, 0);
-  const marketingExpenses = expenses.filter(e => e.categoria === 'Marketing').reduce((sum, expense) => sum + expense.valor, 0);
-  const ocupacaoExpenses = expenses.filter(e => e.categoria === 'Ocupação').reduce((sum, expense) => sum + expense.valor, 0);
+  const cmvExpenses = expenses
+    .filter((e) => e.categoria === "CMV")
+    .reduce((sum, expense) => sum + expense.valor, 0);
+  const impostosExpenses = expenses
+    .filter((e) => e.categoria === "Impostos")
+    .reduce((sum, expense) => sum + expense.valor, 0);
+  const despesasVendasExpenses = expenses
+    .filter((e) => e.categoria === "Despesas com Vendas")
+    .reduce((sum, expense) => sum + expense.valor, 0);
+  const cmoExpenses = expenses
+    .filter((e) => e.categoria === "CMO")
+    .reduce((sum, expense) => sum + expense.valor, 0);
+  const marketingExpenses = expenses
+    .filter((e) => e.categoria === "Marketing")
+    .reduce((sum, expense) => sum + expense.valor, 0);
+  const ocupacaoExpenses = expenses
+    .filter((e) => e.categoria === "Ocupação")
+    .reduce((sum, expense) => sum + expense.valor, 0);
 
   // Calcular totais por tipo DRE
-  const totalCustosVariaveis = impostosExpenses + cmvExpenses + despesasVendasExpenses;
+  const totalCustosVariaveis =
+    impostosExpenses + cmvExpenses + despesasVendasExpenses;
   const totalDespesasFixas = cmoExpenses + marketingExpenses + ocupacaoExpenses;
 
   // Calcular percentuais
-  const cmvPercentage = totalRevenue > 0 ? (cmvExpenses / totalRevenue) * 100 : 0;
-  const impostosPercentage = totalRevenue > 0 ? (impostosExpenses / totalRevenue) * 100 : 0;
-  const despesasVendasPercentage = totalRevenue > 0 ? (despesasVendasExpenses / totalRevenue) * 100 : 0;
-  const cmoPercentage = totalRevenue > 0 ? (cmoExpenses / totalRevenue) * 100 : 0;
-  const marketingPercentage = totalRevenue > 0 ? (marketingExpenses / totalRevenue) * 100 : 0;
-  const ocupacaoPercentage = totalRevenue > 0 ? (ocupacaoExpenses / totalRevenue) * 100 : 0;
-  const fixedExpensesPercentage = totalRevenue > 0 ? (totalDespesasFixas / totalRevenue) * 100 : 0;
-  
+  const cmvPercentage =
+    totalRevenue > 0 ? (cmvExpenses / totalRevenue) * 100 : 0;
+  const impostosPercentage =
+    totalRevenue > 0 ? (impostosExpenses / totalRevenue) * 100 : 0;
+  const despesasVendasPercentage =
+    totalRevenue > 0 ? (despesasVendasExpenses / totalRevenue) * 100 : 0;
+  const cmoPercentage =
+    totalRevenue > 0 ? (cmoExpenses / totalRevenue) * 100 : 0;
+  const marketingPercentage =
+    totalRevenue > 0 ? (marketingExpenses / totalRevenue) * 100 : 0;
+  const ocupacaoPercentage =
+    totalRevenue > 0 ? (ocupacaoExpenses / totalRevenue) * 100 : 0;
+  const fixedExpensesPercentage =
+    totalRevenue > 0 ? (totalDespesasFixas / totalRevenue) * 100 : 0;
+
   // Calcular margem de contribuição e lucro líquido
   const margemContribuicao = totalRevenue - totalCustosVariaveis;
-  const margemContribuicaoPercentage = totalRevenue > 0 ? (margemContribuicao / totalRevenue) * 100 : 0;
+  const margemContribuicaoPercentage =
+    totalRevenue > 0 ? (margemContribuicao / totalRevenue) * 100 : 0;
   const lucroLiquido = margemContribuicao - totalDespesasFixas;
-  const lucroLiquidoPercentage = totalRevenue > 0 ? (lucroLiquido / totalRevenue) * 100 : 0;
+  const lucroLiquidoPercentage =
+    totalRevenue > 0 ? (lucroLiquido / totalRevenue) * 100 : 0;
 
   // Calcular vendas por canal com comparativo de mercado
   const channelSales = sales.reduce((acc, sale) => {
@@ -309,47 +373,72 @@ export const Dashboard: React.FC = () => {
   }, {} as Record<string, { revenue: number; orders: number }>);
 
   const sortedChannels = Object.entries(channelSales)
-    .sort(([,a], [,b]) => b.revenue - a.revenue)
+    .sort(([, a], [, b]) => b.revenue - a.revenue)
     .slice(0, 3);
 
   // Dados simulados de mercado para canais (baseado na região)
   const getMarketChannelData = (channelName: string) => {
     const marketData = {
-      'Salão': { percentage: 45, avgTicket: benchmarkData?.ticket_medio || 35 },
-      'iFood': { percentage: 30, avgTicket: (benchmarkData?.ticket_medio || 35) * 0.9 },
-      'WhatsApp': { percentage: 15, avgTicket: (benchmarkData?.ticket_medio || 35) * 1.1 },
-      'Telefone': { percentage: 5, avgTicket: (benchmarkData?.ticket_medio || 35) * 1.2 },
-      'Retirada (balcão)': { percentage: 3, avgTicket: (benchmarkData?.ticket_medio || 35) * 0.8 },
-      'App próprio': { percentage: 2, avgTicket: (benchmarkData?.ticket_medio || 35) * 1.0 }
+      Salão: { percentage: 45, avgTicket: benchmarkData?.ticket_medio || 35 },
+      iFood: {
+        percentage: 30,
+        avgTicket: (benchmarkData?.ticket_medio || 35) * 0.9,
+      },
+      WhatsApp: {
+        percentage: 15,
+        avgTicket: (benchmarkData?.ticket_medio || 35) * 1.1,
+      },
+      Telefone: {
+        percentage: 5,
+        avgTicket: (benchmarkData?.ticket_medio || 35) * 1.2,
+      },
+      "Retirada (balcão)": {
+        percentage: 3,
+        avgTicket: (benchmarkData?.ticket_medio || 35) * 0.8,
+      },
+      "App próprio": {
+        percentage: 2,
+        avgTicket: (benchmarkData?.ticket_medio || 35) * 1.0,
+      },
     };
-    
-    return marketData[channelName as keyof typeof marketData] || { percentage: 10, avgTicket: benchmarkData?.ticket_medio || 35 };
+
+    return (
+      marketData[channelName as keyof typeof marketData] || {
+        percentage: 10,
+        avgTicket: benchmarkData?.ticket_medio || 35,
+      }
+    );
   };
 
   // NOVO: Função para abrir modal de vendas
   const handleOpenSalesModal = () => {
-    window.location.href = '/sales#add-modal';
+    navigate("/sales#add-modal");
   };
 
   // NOVO: Função para abrir modal de despesas
   const handleOpenExpensesModal = () => {
-    window.location.href = '/expenses#add-modal';
+    navigate("/expenses#add-modal");
   };
 
   const toggleSection = (section: keyof typeof expandedSections) => {
-    setExpandedSections(prev => ({
+    setExpandedSections((prev) => ({
       ...prev,
-      [section]: !prev[section]
+      [section]: !prev[section],
     }));
   };
 
   // Função para calcular variação entre meses
   const getMonthlyVariation = (current: number, previous: number) => {
-    if (previous === 0) return { value: 0, type: 'neutral' as const };
+    if (previous === 0) return { value: 0, type: "neutral" as const };
     const variation = ((current - previous) / previous) * 100;
     return {
       value: Math.abs(variation),
-      type: variation > 0 ? 'positive' as const : variation < 0 ? 'negative' as const : 'neutral' as const
+      type:
+        variation > 0
+          ? ("positive" as const)
+          : variation < 0
+          ? ("negative" as const)
+          : ("neutral" as const),
     };
   };
 
@@ -369,12 +458,15 @@ export const Dashboard: React.FC = () => {
       <div className="p-6 flex flex-col items-center justify-center min-h-screen">
         <div className="text-center max-w-md">
           <Building2 className="w-16 h-16 text-orange-500 mx-auto mb-6" />
-          <h3 className="text-xl font-bold text-gray-900 mb-3">Bem-vindo ao FoodDash!</h3>
+          <h3 className="text-xl font-bold text-gray-900 mb-3">
+            Bem-vindo ao FoodDash!
+          </h3>
           <p className="text-gray-600 mb-6">
-            Para começar a usar todas as funcionalidades, complete seu perfil de restaurante.
+            Para começar a usar todas as funcionalidades, complete seu perfil de
+            restaurante.
           </p>
-          <Link 
-            to="/profile" 
+          <Link
+            to="/profile"
             className="px-6 py-3 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors inline-flex items-center"
           >
             <Settings className="w-5 h-5 mr-2" />
@@ -386,14 +478,20 @@ export const Dashboard: React.FC = () => {
   }
 
   // Se tem restaurante mas não tem dados completos
-  if (!restaurant.cidade || !restaurant.estado || !restaurant.categoria_culinaria) {
+  if (
+    !restaurant.cidade ||
+    !restaurant.estado ||
+    !restaurant.categoria_culinaria
+  ) {
     return (
       <div className="p-6 space-y-8 bg-gray-50 min-h-screen">
         {/* Header com Período e Comparação - SIMPLIFICADO */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Dashboard - {getFilterLabel()}</h2>
+              <h2 className="text-xl font-bold text-gray-900">
+                Dashboard - {getFilterLabel()}
+              </h2>
               <p className="text-sm text-orange-600 font-medium">
                 Complete seu perfil para ativar o benchmarking
               </p>
@@ -413,10 +511,10 @@ export const Dashboard: React.FC = () => {
             🚀 Quase lá! Complete seu perfil para desbloquear todos os recursos
           </h3>
           <p className="text-gray-700 mb-6 max-w-2xl mx-auto leading-relaxed">
-            Para ativar o benchmarking e comparar seu restaurante com outros do mercado, 
-            precisamos de algumas informações básicas:
+            Para ativar o benchmarking e comparar seu restaurante com outros do
+            mercado, precisamos de algumas informações básicas:
           </p>
-          
+
           <div className="bg-white/70 p-4 rounded-lg border border-orange-200 mb-6 max-w-md mx-auto">
             <ul className="text-left space-y-2">
               {!restaurant.cidade && (
@@ -439,9 +537,9 @@ export const Dashboard: React.FC = () => {
               )}
             </ul>
           </div>
-          
-          <Link 
-            to="/profile" 
+
+          <Link
+            to="/profile"
             className="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-lg font-medium hover:from-orange-700 hover:to-orange-800 transition-all duration-200 inline-flex items-center shadow-lg hover:shadow-xl transform hover:scale-105"
           >
             <Settings className="w-5 h-5 mr-2" />
@@ -458,9 +556,12 @@ export const Dashboard: React.FC = () => {
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">Dashboard - {getFilterLabel()}</h2>
+            <h2 className="text-xl font-bold text-gray-900">
+              Dashboard - {getFilterLabel()}
+            </h2>
             <p className="text-sm text-orange-600 font-medium">
-              Comparando com {benchmarkData?.total_restaurantes || 0} restaurantes da região {region}
+              Comparando com {benchmarkData?.total_restaurantes || 0}{" "}
+              restaurantes da região {region}
             </p>
           </div>
         </div>
@@ -479,8 +580,8 @@ export const Dashboard: React.FC = () => {
                 onClick={() => setFilterType(filter.type)}
                 className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
                   filterType === filter.type
-                    ? 'bg-orange-100 text-orange-700'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    ? "bg-orange-100 text-orange-700"
+                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                 }`}
               >
                 {filter.label}
@@ -491,7 +592,9 @@ export const Dashboard: React.FC = () => {
 
           {/* Ações Rápidas - COMPACTAS */}
           <div className="flex items-center space-x-2">
-            <span className="text-sm font-medium text-gray-700 hidden lg:inline">Ações:</span>
+            <span className="text-sm font-medium text-gray-700 hidden lg:inline">
+              Ações:
+            </span>
             <button
               onClick={handleOpenSalesModal}
               className="flex items-center space-x-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
@@ -513,9 +616,9 @@ export const Dashboard: React.FC = () => {
       {/* SEÇÃO 1: VENDAS E FATURAMENTO */}
       {totalRevenue > 0 && benchmarkData && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <div 
+          <div
             className="p-6 border-b border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors"
-            onClick={() => toggleSection('vendas')}
+            onClick={() => toggleSection("vendas")}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -523,8 +626,12 @@ export const Dashboard: React.FC = () => {
                   <DollarSign className="w-5 h-5 text-green-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Vendas e Faturamento</h2>
-                  <p className="text-sm text-gray-600">Compare seu desempenho de vendas com o mercado</p>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Vendas e Faturamento
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    Compare seu desempenho de vendas com o mercado
+                  </p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
@@ -537,7 +644,7 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
           </div>
-          
+
           {expandedSections.vendas && (
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -551,7 +658,7 @@ export const Dashboard: React.FC = () => {
                   totalRestaurants={benchmarkData.total_restaurantes}
                   region={region}
                 />
-                
+
                 <ComparisonCard
                   title="Ticket Médio"
                   myValue={averageTicket}
@@ -582,9 +689,9 @@ export const Dashboard: React.FC = () => {
       {/* SEÇÃO 2: CUSTOS E DESPESAS - CORRIGIDO COM TODAS AS CATEGORIAS */}
       {totalRevenue > 0 && benchmarkData && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <div 
+          <div
             className="p-6 border-b border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors"
-            onClick={() => toggleSection('custos')}
+            onClick={() => toggleSection("custos")}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -592,8 +699,12 @@ export const Dashboard: React.FC = () => {
                   <TrendingDown className="w-5 h-5 text-red-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Custos e Despesas</h2>
-                  <p className="text-sm text-gray-600">Analise seus gastos por categoria comparado ao mercado</p>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Custos e Despesas
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    Analise seus gastos por categoria comparado ao mercado
+                  </p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
@@ -606,7 +717,7 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
           </div>
-          
+
           {expandedSections.custos && (
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -684,9 +795,9 @@ export const Dashboard: React.FC = () => {
       {/* SEÇÃO 3: RENTABILIDADE - CORRIGIDO */}
       {totalRevenue > 0 && benchmarkData && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <div 
+          <div
             className="p-6 border-b border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors"
-            onClick={() => toggleSection('rentabilidade')}
+            onClick={() => toggleSection("rentabilidade")}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -694,8 +805,12 @@ export const Dashboard: React.FC = () => {
                   <Target className="w-5 h-5 text-indigo-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Rentabilidade</h2>
-                  <p className="text-sm text-gray-600">Veja como está sua margem de contribuição e lucro líquido</p>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Rentabilidade
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    Veja como está sua margem de contribuição e lucro líquido
+                  </p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
@@ -708,7 +823,7 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
           </div>
-          
+
           {expandedSections.rentabilidade && (
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -726,7 +841,9 @@ export const Dashboard: React.FC = () => {
                 <ComparisonCard
                   title="Lucro Líquido (%)"
                   myValue={lucroLiquidoPercentage}
-                  marketValue={benchmarkData.margem_media - benchmarkData.gasto_fixo_medio}
+                  marketValue={
+                    benchmarkData.margem_media - benchmarkData.gasto_fixo_medio
+                  }
                   format="percentage"
                   icon={DollarSign}
                   color="bg-teal-600"
@@ -740,11 +857,11 @@ export const Dashboard: React.FC = () => {
       )}
 
       {/* SEÇÃO 4: COMPARATIVO MENSAL - NOVA SEÇÃO COM EVOLUÇÃO TEMPORAL */}
-      {monthlyData.length > 0 && monthlyData.some(m => m.revenue > 0) && (
+      {monthlyData.length > 0 && monthlyData.some((m) => m.revenue > 0) && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <div 
+          <div
             className="p-6 border-b border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors"
-            onClick={() => toggleSection('comparativo')}
+            onClick={() => toggleSection("comparativo")}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -752,8 +869,13 @@ export const Dashboard: React.FC = () => {
                   <Calendar className="w-5 h-5 text-yellow-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Evolução Mensal</h2>
-                  <p className="text-sm text-gray-600">Compare receitas, pedidos, ticket médio e despesas dos últimos 6 meses</p>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Evolução Mensal
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    Compare receitas, pedidos, ticket médio e despesas dos
+                    últimos 6 meses
+                  </p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
@@ -766,7 +888,7 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
           </div>
-          
+
           {expandedSections.comparativo && (
             <div className="p-6">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -778,24 +900,44 @@ export const Dashboard: React.FC = () => {
                   </h3>
                   <div className="space-y-3">
                     {monthlyData.map((month, index) => {
-                      const previousMonth = index > 0 ? monthlyData[index - 1] : null;
-                      const variation = previousMonth ? getMonthlyVariation(month.revenue, previousMonth.revenue) : { value: 0, type: 'neutral' as const };
-                      
+                      const previousMonth =
+                        index > 0 ? monthlyData[index - 1] : null;
+                      const variation = previousMonth
+                        ? getMonthlyVariation(
+                            month.revenue,
+                            previousMonth.revenue
+                          )
+                        : { value: 0, type: "neutral" as const };
+
                       return (
-                        <div key={month.month} className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                        <div
+                          key={month.month}
+                          className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200"
+                        >
                           <div>
-                            <div className="font-medium text-gray-900">{month.monthName}</div>
-                            <div className="text-sm text-gray-600">{month.orders} pedidos</div>
+                            <div className="font-medium text-gray-900">
+                              {month.monthName}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {month.orders} pedidos
+                            </div>
                           </div>
                           <div className="text-right">
                             <div className="font-bold text-green-600">
-                              R$ {month.revenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              R${" "}
+                              {month.revenue.toLocaleString("pt-BR", {
+                                minimumFractionDigits: 2,
+                              })}
                             </div>
-                            {variation.type !== 'neutral' && (
-                              <div className={`text-xs flex items-center ${
-                                variation.type === 'positive' ? 'text-green-600' : 'text-red-600'
-                              }`}>
-                                {variation.type === 'positive' ? (
+                            {variation.type !== "neutral" && (
+                              <div
+                                className={`text-xs flex items-center ${
+                                  variation.type === "positive"
+                                    ? "text-green-600"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {variation.type === "positive" ? (
                                   <ArrowUp className="w-3 h-3 mr-1" />
                                 ) : (
                                   <ArrowDown className="w-3 h-3 mr-1" />
@@ -818,24 +960,44 @@ export const Dashboard: React.FC = () => {
                   </h3>
                   <div className="space-y-3">
                     {monthlyData.map((month, index) => {
-                      const previousMonth = index > 0 ? monthlyData[index - 1] : null;
-                      const variation = previousMonth ? getMonthlyVariation(month.ticket, previousMonth.ticket) : { value: 0, type: 'neutral' as const };
-                      
+                      const previousMonth =
+                        index > 0 ? monthlyData[index - 1] : null;
+                      const variation = previousMonth
+                        ? getMonthlyVariation(
+                            month.ticket,
+                            previousMonth.ticket
+                          )
+                        : { value: 0, type: "neutral" as const };
+
                       return (
-                        <div key={month.month} className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-200">
+                        <div
+                          key={month.month}
+                          className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-200"
+                        >
                           <div>
-                            <div className="font-medium text-gray-900">{month.monthName}</div>
-                            <div className="text-sm text-gray-600">{month.orders} pedidos</div>
+                            <div className="font-medium text-gray-900">
+                              {month.monthName}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {month.orders} pedidos
+                            </div>
                           </div>
                           <div className="text-right">
                             <div className="font-bold text-purple-600">
-                              R$ {month.ticket.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              R${" "}
+                              {month.ticket.toLocaleString("pt-BR", {
+                                minimumFractionDigits: 2,
+                              })}
                             </div>
-                            {variation.type !== 'neutral' && (
-                              <div className={`text-xs flex items-center ${
-                                variation.type === 'positive' ? 'text-green-600' : 'text-red-600'
-                              }`}>
-                                {variation.type === 'positive' ? (
+                            {variation.type !== "neutral" && (
+                              <div
+                                className={`text-xs flex items-center ${
+                                  variation.type === "positive"
+                                    ? "text-green-600"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {variation.type === "positive" ? (
                                   <ArrowUp className="w-3 h-3 mr-1" />
                                 ) : (
                                   <ArrowDown className="w-3 h-3 mr-1" />
@@ -858,26 +1020,49 @@ export const Dashboard: React.FC = () => {
                   </h3>
                   <div className="space-y-3">
                     {monthlyData.map((month, index) => {
-                      const previousMonth = index > 0 ? monthlyData[index - 1] : null;
-                      const variation = previousMonth ? getMonthlyVariation(month.expenses, previousMonth.expenses) : { value: 0, type: 'neutral' as const };
-                      
+                      const previousMonth =
+                        index > 0 ? monthlyData[index - 1] : null;
+                      const variation = previousMonth
+                        ? getMonthlyVariation(
+                            month.expenses,
+                            previousMonth.expenses
+                          )
+                        : { value: 0, type: "neutral" as const };
+
                       return (
-                        <div key={month.month} className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200">
+                        <div
+                          key={month.month}
+                          className="flex items-center justify-between p-3 bg-red-50 rounded-lg border border-red-200"
+                        >
                           <div>
-                            <div className="font-medium text-gray-900">{month.monthName}</div>
+                            <div className="font-medium text-gray-900">
+                              {month.monthName}
+                            </div>
                             <div className="text-sm text-gray-600">
-                              {month.revenue > 0 ? `${((month.expenses / month.revenue) * 100).toFixed(1)}% da receita` : 'Sem receita'}
+                              {month.revenue > 0
+                                ? `${(
+                                    (month.expenses / month.revenue) *
+                                    100
+                                  ).toFixed(1)}% da receita`
+                                : "Sem receita"}
                             </div>
                           </div>
                           <div className="text-right">
                             <div className="font-bold text-red-600">
-                              R$ {month.expenses.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              R${" "}
+                              {month.expenses.toLocaleString("pt-BR", {
+                                minimumFractionDigits: 2,
+                              })}
                             </div>
-                            {variation.type !== 'neutral' && (
-                              <div className={`text-xs flex items-center ${
-                                variation.type === 'positive' ? 'text-red-600' : 'text-green-600'
-                              }`}>
-                                {variation.type === 'positive' ? (
+                            {variation.type !== "neutral" && (
+                              <div
+                                className={`text-xs flex items-center ${
+                                  variation.type === "positive"
+                                    ? "text-red-600"
+                                    : "text-green-600"
+                                }`}
+                              >
+                                {variation.type === "positive" ? (
                                   <ArrowUp className="w-3 h-3 mr-1" />
                                 ) : (
                                   <ArrowDown className="w-3 h-3 mr-1" />
@@ -901,26 +1086,50 @@ export const Dashboard: React.FC = () => {
                   <div className="space-y-3">
                     {monthlyData.map((month, index) => {
                       const lucro = month.revenue - month.expenses;
-                      const margemLucro = month.revenue > 0 ? (lucro / month.revenue) * 100 : 0;
-                      const previousMonth = index > 0 ? monthlyData[index - 1] : null;
-                      const previousLucro = previousMonth ? previousMonth.revenue - previousMonth.expenses : 0;
-                      const variation = previousMonth ? getMonthlyVariation(lucro, previousLucro) : { value: 0, type: 'neutral' as const };
-                      
+                      const margemLucro =
+                        month.revenue > 0 ? (lucro / month.revenue) * 100 : 0;
+                      const previousMonth =
+                        index > 0 ? monthlyData[index - 1] : null;
+                      const previousLucro = previousMonth
+                        ? previousMonth.revenue - previousMonth.expenses
+                        : 0;
+                      const variation = previousMonth
+                        ? getMonthlyVariation(lucro, previousLucro)
+                        : { value: 0, type: "neutral" as const };
+
                       return (
-                        <div key={month.month} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <div
+                          key={month.month}
+                          className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200"
+                        >
                           <div>
-                            <div className="font-medium text-gray-900">{month.monthName}</div>
-                            <div className="text-sm text-gray-600">Margem: {margemLucro.toFixed(1)}%</div>
+                            <div className="font-medium text-gray-900">
+                              {month.monthName}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              Margem: {margemLucro.toFixed(1)}%
+                            </div>
                           </div>
                           <div className="text-right">
-                            <div className={`font-bold ${lucro >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                              R$ {lucro.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            <div
+                              className={`font-bold ${
+                                lucro >= 0 ? "text-blue-600" : "text-red-600"
+                              }`}
+                            >
+                              R${" "}
+                              {lucro.toLocaleString("pt-BR", {
+                                minimumFractionDigits: 2,
+                              })}
                             </div>
-                            {variation.type !== 'neutral' && (
-                              <div className={`text-xs flex items-center ${
-                                variation.type === 'positive' ? 'text-green-600' : 'text-red-600'
-                              }`}>
-                                {variation.type === 'positive' ? (
+                            {variation.type !== "neutral" && (
+                              <div
+                                className={`text-xs flex items-center ${
+                                  variation.type === "positive"
+                                    ? "text-green-600"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {variation.type === "positive" ? (
                                   <ArrowUp className="w-3 h-3 mr-1" />
                                 ) : (
                                   <ArrowDown className="w-3 h-3 mr-1" />
@@ -943,9 +1152,9 @@ export const Dashboard: React.FC = () => {
       {/* SEÇÃO 5: COMPARATIVO POR CANAIS */}
       {sortedChannels.length > 0 && benchmarkData && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <div 
+          <div
             className="p-6 border-b border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors"
-            onClick={() => toggleSection('canais')}
+            onClick={() => toggleSection("canais")}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -953,12 +1162,18 @@ export const Dashboard: React.FC = () => {
                   <BarChart3 className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">Comparativo por Canais de Venda</h2>
-                  <p className="text-sm text-gray-600">Análise detalhada de cada canal vs mercado</p>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Comparativo por Canais de Venda
+                  </h2>
+                  <p className="text-sm text-gray-600">
+                    Análise detalhada de cada canal vs mercado
+                  </p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                <span className="text-sm text-gray-500">{sortedChannels.length} canais</span>
+                <span className="text-sm text-gray-500">
+                  {sortedChannels.length} canais
+                </span>
                 {expandedSections.canais ? (
                   <EyeOff className="w-5 h-5 text-gray-400" />
                 ) : (
@@ -967,7 +1182,7 @@ export const Dashboard: React.FC = () => {
               </div>
             </div>
           </div>
-          
+
           {expandedSections.canais && (
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -975,30 +1190,45 @@ export const Dashboard: React.FC = () => {
                   const marketData = getMarketChannelData(channel);
                   const myPercentage = (data.revenue / totalRevenue) * 100;
                   const myTicket = data.revenue / data.orders;
-                  
+
                   return (
-                    <div key={channel} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                    <div
+                      key={channel}
+                      className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
+                    >
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-semibold text-gray-900">{channel}</h3>
+                        <h3 className="font-semibold text-gray-900">
+                          {channel}
+                        </h3>
                         <span className="text-xs font-bold text-orange-600 bg-orange-100 px-2 py-1 rounded-full">
                           {index + 1}º lugar
                         </span>
                       </div>
-                      
+
                       <div className="space-y-4">
                         {/* Participação no Faturamento */}
                         <div>
                           <div className="flex justify-between text-sm mb-2">
-                            <span className="text-gray-600">Participação no faturamento</span>
+                            <span className="text-gray-600">
+                              Participação no faturamento
+                            </span>
                           </div>
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
-                              <span className="text-xs text-gray-600">Você:</span>
-                              <span className="font-semibold text-orange-600">{myPercentage.toFixed(1)}%</span>
+                              <span className="text-xs text-gray-600">
+                                Você:
+                              </span>
+                              <span className="font-semibold text-orange-600">
+                                {myPercentage.toFixed(1)}%
+                              </span>
                             </div>
                             <div className="flex justify-between items-center">
-                              <span className="text-xs text-gray-600">Mercado:</span>
-                              <span className="font-semibold text-blue-600">{marketData.percentage}%</span>
+                              <span className="text-xs text-gray-600">
+                                Mercado:
+                              </span>
+                              <span className="font-semibold text-blue-600">
+                                {marketData.percentage}%
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -1010,30 +1240,55 @@ export const Dashboard: React.FC = () => {
                           </div>
                           <div className="space-y-2">
                             <div className="flex justify-between items-center">
-                              <span className="text-xs text-gray-600">Você:</span>
-                              <span className="font-semibold text-orange-600">R$ {myTicket.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <span className="text-xs text-gray-600">
+                                Você:
+                              </span>
+                              <span className="font-semibold text-orange-600">
+                                R${" "}
+                                {myTicket.toLocaleString("pt-BR", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </span>
                             </div>
                             <div className="flex justify-between items-center">
-                              <span className="text-xs text-gray-600">Mercado:</span>
-                              <span className="font-semibold text-blue-600">R$ {marketData.avgTicket.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                              <span className="text-xs text-gray-600">
+                                Mercado:
+                              </span>
+                              <span className="font-semibold text-blue-600">
+                                R${" "}
+                                {marketData.avgTicket.toLocaleString("pt-BR", {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 2,
+                                })}
+                              </span>
                             </div>
                           </div>
                         </div>
 
                         {/* Performance */}
-                        <div className={`p-2 rounded-lg text-center text-xs font-medium ${
-                          myPercentage > marketData.percentage
-                            ? 'bg-green-50 text-green-700 border border-green-200'
+                        <div
+                          className={`p-2 rounded-lg text-center text-xs font-medium ${
+                            myPercentage > marketData.percentage
+                              ? "bg-green-50 text-green-700 border border-green-200"
+                              : myPercentage < marketData.percentage * 0.8
+                              ? "bg-red-50 text-red-700 border border-red-200"
+                              : "bg-gray-50 text-gray-700 border border-gray-200"
+                          }`}
+                        >
+                          {myPercentage > marketData.percentage
+                            ? `${(
+                                ((myPercentage - marketData.percentage) /
+                                  marketData.percentage) *
+                                100
+                              ).toFixed(0)}% acima do mercado`
                             : myPercentage < marketData.percentage * 0.8
-                            ? 'bg-red-50 text-red-700 border border-red-200'
-                            : 'bg-gray-50 text-gray-700 border border-gray-200'
-                        }`}>
-                          {myPercentage > marketData.percentage 
-                            ? `${((myPercentage - marketData.percentage) / marketData.percentage * 100).toFixed(0)}% acima do mercado`
-                            : myPercentage < marketData.percentage * 0.8
-                            ? `${((marketData.percentage - myPercentage) / marketData.percentage * 100).toFixed(0)}% abaixo do mercado`
-                            : 'Na média do mercado'
-                          }
+                            ? `${(
+                                ((marketData.percentage - myPercentage) /
+                                  marketData.percentage) *
+                                100
+                              ).toFixed(0)}% abaixo do mercado`
+                            : "Na média do mercado"}
                         </div>
                       </div>
                     </div>
@@ -1058,14 +1313,22 @@ export const Dashboard: React.FC = () => {
             🚀 Pronto para decolar seus resultados?
           </h3>
           <p className="text-gray-700 mb-2 max-w-2xl mx-auto leading-relaxed">
-            <strong>Você só pode ver dados comparativos se informar seus próprios dados!</strong>
+            <strong>
+              Você só pode ver dados comparativos se informar seus próprios
+              dados!
+            </strong>
           </p>
           <p className="text-gray-600 mb-6 max-w-2xl mx-auto">
-            Para o período <strong>{getFilterLabel()}</strong>, você ainda não registrou vendas. 
-            Comece agora e desbloqueie insights poderosos comparando seu desempenho com 
-            <strong> {benchmarkData?.total_restaurantes || 0} restaurantes</strong> da sua região!
+            Para o período <strong>{getFilterLabel()}</strong>, você ainda não
+            registrou vendas. Comece agora e desbloqueie insights poderosos
+            comparando seu desempenho com
+            <strong>
+              {" "}
+              {benchmarkData?.total_restaurantes || 0} restaurantes
+            </strong>{" "}
+            da sua região!
           </p>
-          
+
           <div className="flex flex-col sm:flex-row justify-center gap-4 mb-6">
             <button
               onClick={handleOpenSalesModal}
@@ -1075,7 +1338,7 @@ export const Dashboard: React.FC = () => {
               <span>Registrar Primeira Venda</span>
             </button>
             <button
-              onClick={() => setFilterType('mes_atual')}
+              onClick={() => setFilterType("mes_atual")}
               className="px-6 py-3 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 transition-colors"
             >
               Ver Este Mês
@@ -1084,7 +1347,8 @@ export const Dashboard: React.FC = () => {
 
           <div className="bg-white/70 p-4 rounded-lg border border-orange-200">
             <p className="text-sm text-gray-600">
-              💡 <strong>Dica:</strong> Quanto mais dados você registrar, mais precisos serão seus comparativos e insights de mercado!
+              💡 <strong>Dica:</strong> Quanto mais dados você registrar, mais
+              precisos serão seus comparativos e insights de mercado!
             </p>
           </div>
         </div>
@@ -1096,8 +1360,10 @@ export const Dashboard: React.FC = () => {
           <div className="flex items-center space-x-2">
             <BarChart3 className="w-5 h-5 text-blue-600" />
             <span className="text-sm font-medium text-blue-800">
-              Dados de comparação: {benchmarkData.fonte === 'simulado' ? 'Simulados' : 'Reais'} • 
-              {benchmarkData.total_restaurantes} restaurantes de {restaurant.categoria_culinaria} na região {region}
+              Dados de comparação:{" "}
+              {benchmarkData.fonte === "simulado" ? "Simulados" : "Reais"} •
+              {benchmarkData.total_restaurantes} restaurantes de{" "}
+              {restaurant.categoria_culinaria} na região {region}
             </span>
           </div>
         </div>
