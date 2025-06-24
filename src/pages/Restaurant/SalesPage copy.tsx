@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, TrendingUp, DollarSign, ShoppingCart, Edit, Trash2, X, Check, AlertCircle, Filter, Search, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Calendar, TrendingUp, DollarSign, ShoppingCart, Edit, Trash2, X, Check, AlertCircle, Filter, Search } from 'lucide-react';
 import { useRestaurant } from '../../hooks/useRestaurant';
 import { useDateFilter } from '../../hooks/useDateFilter';
 import { useToast } from '../../hooks/useToast';
@@ -629,83 +629,6 @@ export const SalesPage: React.FC = () => {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedSales = filteredSales.slice(startIndex, startIndex + itemsPerPage);
 
-  // Sorting functionality
-  const [sortConfig, setSortConfig] = useState<{
-    key: string;
-    direction: 'ascending' | 'descending';
-  } | null>(null);
-
-  const requestSort = (key: string) => {
-    let direction: 'ascending' | 'descending' = 'ascending';
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    setSortConfig({ key, direction });
-  };
-
-  const getSortedItems = (items: SalesLaunch[]) => {
-    if (!sortConfig) return items;
-    
-    return [...items].sort((a, b) => {
-      let aValue, bValue;
-      
-      switch (sortConfig.key) {
-        case 'data':
-          aValue = new Date(a.data).getTime();
-          bValue = new Date(b.data).getTime();
-          break;
-        case 'faturamento':
-          aValue = a.faturamento_total;
-          bValue = b.faturamento_total;
-          break;
-        case 'pedidos':
-          aValue = a.pedidos_total;
-          bValue = b.pedidos_total;
-          break;
-        case 'ticket':
-          aValue = a.ticket_medio;
-          bValue = b.ticket_medio;
-          break;
-        case 'created_at':
-          aValue = new Date(a.created_at).getTime();
-          bValue = new Date(b.created_at).getTime();
-          break;
-        default:
-          return 0;
-      }
-      
-      if (aValue < bValue) {
-        return sortConfig.direction === 'ascending' ? -1 : 1;
-      }
-      if (aValue > bValue) {
-        return sortConfig.direction === 'ascending' ? 1 : -1;
-      }
-      return 0;
-    });
-  };
-
-  const sortedItems = getSortedItems(paginatedSales);
-
-  const renderSortIcon = (key: string) => {
-    if (!sortConfig || sortConfig.key !== key) {
-      return (
-        <span className="inline-block ml-1 text-gray-400">
-          <ArrowDown className="w-3 h-3" />
-        </span>
-      );
-    }
-    
-    return (
-      <span className="inline-block ml-1 text-orange-600">
-        {sortConfig.direction === 'ascending' ? (
-          <ArrowUp className="w-3 h-3" />
-        ) : (
-          <ArrowDown className="w-3 h-3" />
-        )}
-      </span>
-    );
-  };
-
   if (isLoading) {
     return (
       <div className="p-6 flex items-center justify-center">
@@ -889,26 +812,16 @@ export const SalesPage: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('data')}>
-                  Data da Venda {renderSortIcon('data')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('faturamento')}>
-                  Faturamento Total {renderSortIcon('faturamento')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('pedidos')}>
-                  Qtd Pedidos {renderSortIcon('pedidos')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('ticket')}>
-                  Ticket Médio {renderSortIcon('ticket')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('created_at')}>
-                  Inserido em {renderSortIcon('created_at')}
-                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data da Venda</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Faturamento Total</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qtd Pedidos</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ticket Médio</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Inserido em</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {sortedItems.map((launch) => (
+              {paginatedSales.map((launch) => (
                 <tr key={launch.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">

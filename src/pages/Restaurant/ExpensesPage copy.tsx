@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, TrendingDown, DollarSign, CreditCard, Edit, Trash2, X, Check, AlertCircle, Filter, Search, Target, Receipt, Percent, BarChart3, CheckCircle, Clock, Zap, TrendingUp, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Calendar, TrendingDown, DollarSign, CreditCard, Edit, Trash2, X, Check, AlertCircle, Filter, Search, Target, Receipt, Percent, BarChart3, CheckCircle, Clock, Zap, TrendingUp } from 'lucide-react';
 import { useRestaurant } from '../../hooks/useRestaurant';
 import { useDateFilter } from '../../hooks/useDateFilter';
 import { useToast } from '../../hooks/useToast';
@@ -512,86 +512,10 @@ export const ExpensesPage: React.FC = () => {
     return matchesSearch && matchesCategory && matchesStatus;
   });
 
-  // Sorting functionality
-  const [sortConfig, setSortConfig] = useState<{
-    key: string;
-    direction: 'ascending' | 'descending';
-  } | null>(null);
-
-  const requestSort = (key: string) => {
-    let direction: 'ascending' | 'descending' = 'ascending';
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    setSortConfig({ key, direction });
-  };
-
-  const getSortedItems = (items: Expense[]) => {
-    if (!sortConfig) return items;
-    
-    return [...items].sort((a, b) => {
-      let aValue, bValue;
-      
-      switch (sortConfig.key) {
-        case 'nome':
-          aValue = a.nome;
-          bValue = b.nome;
-          break;
-        case 'categoria':
-          aValue = a.categoria;
-          bValue = b.categoria;
-          break;
-        case 'valor':
-          aValue = a.valor;
-          bValue = b.valor;
-          break;
-        case 'data':
-          aValue = new Date(a.data).getTime();
-          bValue = new Date(b.data).getTime();
-          break;
-        case 'status':
-          aValue = a.pago ? 1 : 0;
-          bValue = b.pago ? 1 : 0;
-          break;
-        default:
-          return 0;
-      }
-      
-      if (aValue < bValue) {
-        return sortConfig.direction === 'ascending' ? -1 : 1;
-      }
-      if (aValue > bValue) {
-        return sortConfig.direction === 'ascending' ? 1 : -1;
-      }
-      return 0;
-    });
-  };
-
   // Pagination
   const totalPages = Math.ceil(filteredExpenses.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const sortedExpenses = getSortedItems(filteredExpenses);
-  const paginatedExpenses = sortedExpenses.slice(startIndex, startIndex + itemsPerPage);
-
-  const renderSortIcon = (key: string) => {
-    if (!sortConfig || sortConfig.key !== key) {
-      return (
-        <span className="inline-block ml-1 text-gray-400">
-          <ArrowDown className="w-3 h-3" />
-        </span>
-      );
-    }
-    
-    return (
-      <span className="inline-block ml-1 text-orange-600">
-        {sortConfig.direction === 'ascending' ? (
-          <ArrowUp className="w-3 h-3" />
-        ) : (
-          <ArrowDown className="w-3 h-3" />
-        )}
-      </span>
-    );
-  };
+  const paginatedExpenses = filteredExpenses.slice(startIndex, startIndex + itemsPerPage);
 
   const getCategoryIcon = (categoryName: string) => {
     switch (categoryName) {
@@ -863,21 +787,11 @@ export const ExpensesPage: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('nome')}>
-                  Despesa {renderSortIcon('nome')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('categoria')}>
-                  Categoria {renderSortIcon('categoria')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('valor')}>
-                  Valor {renderSortIcon('valor')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('data')}>
-                  Data {renderSortIcon('data')}
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer" onClick={() => requestSort('status')}>
-                  Status {renderSortIcon('status')}
-                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Despesa</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
               </tr>
             </thead>
@@ -930,13 +844,6 @@ export const ExpensesPage: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end space-x-2">
-                      <button
-                        onClick={() => {/* Implement edit functionality */}}
-                        className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Editar despesa"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
                       <button
                         onClick={() => handleDeleteExpense(expense)}
                         className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"

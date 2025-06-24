@@ -84,7 +84,7 @@ export const Header: React.FC = () => {
   return (
     <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-5 h-16 sm:h-20 fixed top-0 left-0 right-0 z-40">
       <div className="flex items-center justify-between h-full">
-        <div className="flex items-center space-x-4 sm:space-x-6 h-full">
+        <div className="flex items-center space-x-4 sm:space-x-6 h-full ml-10 md:ml-0">
           {/* Logo */}
           <div className="h-12 sm:h-16 md:h-18 flex items-center">
             <img 

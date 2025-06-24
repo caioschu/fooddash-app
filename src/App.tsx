@@ -10,7 +10,6 @@ import { PricingPage } from './pages/Pricing/PricingPage';
 import { Dashboard } from './pages/Restaurant/Dashboard';
 import { Profile } from './pages/Restaurant/Profile';
 import { AccessManagement } from './pages/Restaurant/AccessManagement';
-import { DomainSettings } from './pages/Restaurant/DomainSettings';
 import { SalesPage } from './pages/Restaurant/SalesPage';
 import { ExpensesPage } from './pages/Restaurant/ExpensesPage';
 import { DREPage } from './pages/Restaurant/DREPage';
@@ -21,6 +20,8 @@ import { AdminDashboard } from './pages/Admin/AdminDashboard';
 import { AdminRestaurants } from './pages/Admin/AdminRestaurants';
 import { AdminBenchmarking } from './pages/Admin/AdminBenchmarking';
 import { AdminCategories } from './pages/Admin/AdminCategories';
+import { AdminAnalytics } from './pages/Admin/AdminAnalytics';
+import { AdminRestaurantView } from './pages/Admin/AdminRestaurantView';
 import AdminAccess from './pages/AdminAccess';
 import AdminPromote from './pages/AdminPromote';
 import { Header } from './components/Layout/Header';
@@ -93,7 +94,6 @@ const AppRoutes: React.FC = () => {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/profile/access" element={<AccessManagement />} />
-            <Route path="/profile/domain" element={<DomainSettings />} />
             <Route path="/sales" element={<SalesPage />} />
             <Route path="/expenses" element={<ExpensesPage />} />
             <Route path="/dre" element={<DREPage />} />
@@ -109,8 +109,10 @@ const AppRoutes: React.FC = () => {
               <>
                 <Route path="/admin" element={<AdminDashboard />} />
                 <Route path="/admin/restaurants" element={<AdminRestaurants />} />
+                <Route path="/admin/restaurants/:id" element={<AdminRestaurantView />} />
                 <Route path="/admin/benchmarking" element={<AdminBenchmarking />} />
                 <Route path="/admin/categories" element={<AdminCategories />} />
+                <Route path="/admin/analytics" element={<AdminAnalytics />} />
               </>
             )}
             

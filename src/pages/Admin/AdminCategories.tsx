@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Save, X, Check, AlertCircle, Filter, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Edit, Trash2, Save, X, Check, AlertCircle, Filter, Search, ChevronDown, ChevronUp, ArrowUp, ArrowDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../hooks/useToast';
 import { ConfirmDialog } from '../../components/Common/ConfirmDialog';
@@ -34,6 +34,8 @@ export const AdminCategories: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'fixa' | 'variavel' | 'marketing'>('all');
+  const [sortField, setSortField] = useState<string>('ordem');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   
   // Estados para edição
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
@@ -325,12 +327,49 @@ export const AdminCategories: React.FC = () => {
     }));
   };
 
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      // Toggle direction if same field
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      // Set new field and default to ascending
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Render sort icon
+  const renderSortIcon = (field: string) => {
+    if (sortField !== field) return null;
+    
+    return sortDirection === 'asc' 
+      ? <ArrowUp className="w-4 h-4 inline-block ml-1" /> 
+      : <ArrowDown className="w-4 h-4 inline-block ml-1" />;
+  };
+
   // Filtrar categorias
   const filteredCategories = categories.filter(category => {
     const matchesSearch = category.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (category.descricao && category.descricao.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesType = filterType === 'all' || category.tipo === filterType;
     return matchesSearch && matchesType;
+  }).sort((a, b) => {
+    if (sortField === 'nome' || sortField === 'descricao') {
+      const aValue = a[sortField as keyof ExpenseCategory] || '';
+      const bValue = b[sortField as keyof ExpenseCategory] || '';
+      return sortDirection === 'asc' 
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    } else if (sortField === 'tipo') {
+      return sortDirection === 'asc' 
+        ? a.tipo.localeCompare(b.tipo)
+        : b.tipo.localeCompare(a.tipo);
+    } else if (sortField === 'ordem') {
+      return sortDirection === 'asc' 
+        ? a.ordem - b.ordem
+        : b.ordem - a.ordem;
+    }
+    return 0;
   });
 
   if (isLoading) {
@@ -530,11 +569,30 @@ export const AdminCategories: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nome</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subcategorias</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSort('nome')}
+                >
+                  Nome {renderSortIcon('nome')}
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSort('tipo')}
+                >
+                  Tipo {renderSortIcon('tipo')}
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSort('descricao')}
+                >
+                  Descrição {renderSortIcon('descricao')}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Subcategorias
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Ações
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
