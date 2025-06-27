@@ -95,8 +95,8 @@ const AppRoutes: React.FC = () => {
 
   // If authenticated, show main app
   return (
-    <RestaurantProvider>
-      <RestaurantSelectorProvider>
+    <RestaurantSelectorProvider>
+      <RestaurantProvider>
         <SidebarProvider>
           <AppLayout>
             <Routes>
@@ -177,8 +177,8 @@ const AppRoutes: React.FC = () => {
             </Routes>
           </AppLayout>
         </SidebarProvider>
-      </RestaurantSelectorProvider>
-    </RestaurantProvider>
+      </RestaurantProvider>
+    </RestaurantSelectorProvider>
   );
 };
 

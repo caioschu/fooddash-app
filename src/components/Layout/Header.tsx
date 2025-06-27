@@ -126,12 +126,12 @@ export const Header: React.FC = () => {
             />
           </div>
           
-          {/* Restaurant Selector */}
+          {/* Restaurant Selector or Restaurant Info */}
           {user && !isEmployeeAuth && (
             <RestaurantSelector />
           )}
           
-          {/* Restaurant Info - Only for employee users */}
+          {/* Employee Restaurant Info */}
           {(isEmployeeAuth && employeeUser) && (
             <div className="flex items-center space-x-4 pl-4 sm:pl-6 border-l border-gray-200">
               <div className="w-12 h-12 sm:w-14 sm:h-14 bg-orange-100 rounded-xl flex items-center justify-center overflow-hidden">
@@ -151,6 +151,17 @@ export const Header: React.FC = () => {
                 </h1>
                 <p className="text-sm text-gray-600">
                   {employeeUser?.restaurant_category}
+                </p>
+              </div>
+            </div>
+          )}
+          
+          {/* Display restaurant info for regular users when no selector is shown */}
+          {restaurant && !isEmployeeAuth && (
+            <div className="hidden md:flex items-center space-x-4 pl-4 sm:pl-6 border-l border-gray-200">
+              <div className="hidden sm:block">
+                <p className="text-sm text-gray-600">
+                  {restaurant?.categoria_culinaria} • {restaurant?.cidade}, {restaurant?.estado}
                 </p>
               </div>
             </div>

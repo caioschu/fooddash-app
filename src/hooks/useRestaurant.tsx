@@ -1,6 +1,7 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
+import { useRestaurantSelector } from './useRestaurantSelector';
 import { Database } from '../lib/supabase';
 
 type Restaurant = Database['public']['Tables']['restaurants']['Row'];
@@ -35,6 +36,7 @@ export const useRestaurant = () => {
 
 export const RestaurantProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
+  const { selectedRestaurantId } = useRestaurantSelector();
   const [restaurant, setRestaurant] = useState<Restaurant | null>(null);
   const [salesChannels, setSalesChannels] = useState<SalesChannel[]>([]);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -45,7 +47,7 @@ export const RestaurantProvider = ({ children }: { children: ReactNode }) => {
     if (user && user.tipo_usuario === 'restaurante') {
       fetchRestaurantData();
     }
-  }, [user]);
+  }, [user, selectedRestaurantId]);
 
   const fetchRestaurantData = async () => {
     if (!user) return;
@@ -60,11 +62,20 @@ export const RestaurantProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      // Fetch restaurant data directly without connection test
+      // If no specific restaurant is selected, don't fetch any restaurant data
+      if (!selectedRestaurantId) {
+        setRestaurant(null);
+        setSalesChannels([]);
+        setPaymentMethods([]);
+        return;
+      }
+
+      // Fetch restaurant data using selectedRestaurantId
       const { data: restaurantData, error: restaurantError } = await supabase
         .from('restaurants')
         .select('*')
-        .eq('user_id', user.id);
+        .eq('id', selectedRestaurantId)
+        .single();
 
       if (restaurantError) {
         console.error('Error fetching restaurant:', restaurantError);
@@ -72,16 +83,15 @@ export const RestaurantProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      // Set restaurant to first result or null if no results
-      const restaurantRecord = restaurantData && restaurantData.length > 0 ? restaurantData[0] : null;
-      setRestaurant(restaurantRecord);
+      // Set restaurant data
+      setRestaurant(restaurantData);
 
-      if (restaurantRecord) {
+      if (restaurantData) {
         // Fetch sales channels with error handling
         const { data: channelsData, error: channelsError } = await supabase
           .from('sales_channels')
           .select('*')
-          .eq('restaurant_id', restaurantRecord.id)
+          .eq('restaurant_id', restaurantData.id)
           .order('created_at');
 
         if (channelsError) {
@@ -95,7 +105,7 @@ export const RestaurantProvider = ({ children }: { children: ReactNode }) => {
         const { data: methodsData, error: methodsError } = await supabase
           .from('payment_methods')
           .select('*')
-          .eq('restaurant_id', restaurantRecord.id)
+          .eq('restaurant_id', restaurantData.id)
           .order('created_at');
 
         if (methodsError) {
