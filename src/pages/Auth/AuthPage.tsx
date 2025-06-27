@@ -1,10 +1,32 @@
 import React, { useState } from 'react';
 import { LoginForm } from '../../components/Auth/LoginForm';
 import { RegisterForm } from '../../components/Auth/RegisterForm';
+import { EmployeeLoginForm } from '../../components/Auth/EmployeeLoginForm';
 import logoHorizontal from '../../assets/FreeSample-Vectorizer-io-logo horizontal.svg';
 
 export const AuthPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
+  const [isEmployeeLogin, setIsEmployeeLogin] = useState(false);
+
+  const handleSwitchToRegister = () => {
+    setIsLogin(false);
+    setIsEmployeeLogin(false);
+  };
+
+  const handleSwitchToLogin = () => {
+    setIsLogin(true);
+    setIsEmployeeLogin(false);
+  };
+
+  const handleSwitchToEmployeeLogin = () => {
+    setIsLogin(true);
+    setIsEmployeeLogin(true);
+  };
+
+  const handleSwitchToRegularLogin = () => {
+    setIsLogin(true);
+    setIsEmployeeLogin(false);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-green-50 flex items-center justify-center p-4">
@@ -22,9 +44,16 @@ export const AuthPage: React.FC = () => {
 
         <div className="bg-white rounded-2xl shadow-xl p-6 sm:p-8">
           {isLogin ? (
-            <LoginForm onSwitchToRegister={() => setIsLogin(false)} />
+            isEmployeeLogin ? (
+              <EmployeeLoginForm onSwitchToRegular={handleSwitchToRegularLogin} />
+            ) : (
+              <LoginForm 
+                onSwitchToRegister={handleSwitchToRegister} 
+                onSwitchToEmployeeLogin={handleSwitchToEmployeeLogin}
+              />
+            )
           ) : (
-            <RegisterForm onSwitchToLogin={() => setIsLogin(true)} />
+            <RegisterForm onSwitchToLogin={handleSwitchToLogin} />
           )}
         </div>
 

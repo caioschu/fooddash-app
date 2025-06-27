@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Eye, EyeOff, Save, X, Users, Shield, Clock, Mail, User, Key, CheckCircle, XCircle, Settings, BarChart3, CreditCard, TrendingUp, Building2 } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
 import { useRestaurant } from '../../hooks/useRestaurant';
 import { useToast } from '../../hooks/useToast';
 import { supabase } from '../../lib/supabase';
@@ -44,6 +45,7 @@ interface NewAccessForm {
 }
 
 export const AccessManagement: React.FC = () => {
+  const { user } = useAuth();
   const { restaurant } = useRestaurant();
   const { showSuccess, showError } = useToast();
   
@@ -52,6 +54,7 @@ export const AccessManagement: React.FC = () => {
   const [showNewForm, setShowNewForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   
   const [newAccess, setNewAccess] = useState<NewAccessForm>({
     name: '',
@@ -113,7 +116,7 @@ export const AccessManagement: React.FC = () => {
   };
 
   const handleCreateAccess = async () => {
-    if (!restaurant) return;
+    if (!restaurant || !user) return;
     
     if (!newAccess.name || !newAccess.email || !newAccess.password) {
       showError('Campos obrigatórios', 'Preencha todos os campos obrigatórios.');
@@ -125,29 +128,70 @@ export const AccessManagement: React.FC = () => {
       return;
     }
 
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newAccess.email)) {
+      showError('Email inválido', 'Por favor, insira um email válido.');
+      return;
+    }
+
+    setIsCreating(true);
+    
     try {
-      // Hash da senha (em produção, usar bcrypt adequado)
-      const passwordHash = btoa(newAccess.password); // Simplificado para demo
+      console.log('Creating employee access with data:', {
+        restaurant_id: restaurant.id,
+        name: newAccess.name,
+        email: newAccess.email,
+        permissions: newAccess.permissions
+      });
+
+      // Check if we have the necessary environment variables for Edge Functions
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      if (!supabaseUrl || supabaseUrl === 'undefined') {
+        showError('Configuração incompleta', 'O sistema não está configurado corretamente para criar acessos de funcionários. Entre em contato com o suporte.');
+        return;
+      }
+
+      console.log('Calling Edge Function to create employee access...');
       
-      const { data, error } = await supabase
-        .from('user_accesses')
-        .insert([{
+      const { data, error } = await supabase.functions.invoke('create-employee-access', {
+        body: {
           restaurant_id: restaurant.id,
+          created_by: user.id,
           name: newAccess.name,
           email: newAccess.email,
-          password_hash: passwordHash,
+          password: newAccess.password,
           permissions: newAccess.permissions
-        }])
-        .select();
+        }
+      });
+
+      console.log('Edge Function response:', { data, error });
 
       if (error) {
-        if (error.code === '23505') { // Unique violation
+        // Handle specific error cases
+        if (error.message?.includes('already exists') || error.message?.includes('duplicate')) {
           showError('Email já existe', 'Este email já está sendo usado por outro acesso.');
           return;
         }
-        throw error;
+        
+        // For other errors, show a more detailed message
+        let errorMessage = 'Não foi possível criar o acesso de funcionário.';
+        if (error.message) {
+          if (error.message.includes('network') || error.message.includes('fetch')) {
+            errorMessage = 'Erro de conexão. Verifique sua internet e tente novamente.';
+          } else if (error.message.includes('Function not found')) {
+            errorMessage = 'Funcionalidade não disponível. Entre em contato com o suporte.';
+          } else {
+            errorMessage += ` Detalhes: ${error.message}`;
+          }
+        }
+        
+        showError('Erro ao criar acesso', errorMessage);
+        return;
       }
 
+      console.log('Edge Function successful:', data);
+      
       showSuccess('Acesso criado!', `Acesso para ${newAccess.name} foi criado com sucesso.`);
       
       setNewAccess({
@@ -168,9 +212,30 @@ export const AccessManagement: React.FC = () => {
       setShowNewForm(false);
       
       await fetchAccesses();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating access:', error);
-      showError('Erro ao criar acesso', 'Não foi possível criar o acesso.');
+      
+      let errorMessage = 'Não foi possível criar o acesso de funcionário.';
+      
+      if (error.message) {
+        if (error.message.includes('duplicate') || error.message.includes('already exists')) {
+          errorMessage = 'Este email já está sendo usado por outro acesso.';
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+          errorMessage = 'Erro de conexão. Verifique sua internet e tente novamente.';
+        } else if (error.message.includes('Function not found')) {
+          errorMessage = 'Funcionalidade não disponível. Entre em contato com o suporte.';
+        } else {
+          errorMessage += ` Detalhes: ${error.message}`;
+        }
+      }
+      
+      if (error.code && !error.message.includes('duplicate')) {
+        errorMessage += ` (Código: ${error.code})`;
+      }
+      
+      showError('Erro ao criar acesso', errorMessage);
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -382,6 +447,7 @@ export const AccessManagement: React.FC = () => {
                 onChange={(e) => setNewAccess(prev => ({ ...prev, name: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 placeholder="Ex: João Silva"
+                disabled={isCreating}
               />
             </div>
             
@@ -395,6 +461,7 @@ export const AccessManagement: React.FC = () => {
                 onChange={(e) => setNewAccess(prev => ({ ...prev, email: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                 placeholder="joao@exemplo.com"
+                disabled={isCreating}
               />
             </div>
             
@@ -409,11 +476,13 @@ export const AccessManagement: React.FC = () => {
                   onChange={(e) => setNewAccess(prev => ({ ...prev, password: e.target.value }))}
                   className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   placeholder="Mínimo 6 caracteres"
+                  disabled={isCreating}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  disabled={isCreating}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -432,7 +501,9 @@ export const AccessManagement: React.FC = () => {
                 return (
                   <label
                     key={key}
-                    className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                    className={`flex items-start space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer ${
+                      isCreating ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
                   >
                     <input
                       type="checkbox"
@@ -445,6 +516,7 @@ export const AccessManagement: React.FC = () => {
                         }
                       }))}
                       className="mt-1 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                      disabled={isCreating}
                     />
                     <div className="flex-1">
                       <div className="flex items-center space-x-2">
@@ -463,15 +535,26 @@ export const AccessManagement: React.FC = () => {
             <button
               onClick={() => setShowNewForm(false)}
               className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              disabled={isCreating}
             >
               Cancelar
             </button>
             <button
               onClick={handleCreateAccess}
-              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center space-x-2"
+              disabled={isCreating}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Save className="w-4 h-4" />
-              <span>Criar Acesso</span>
+              {isCreating ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Criando...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Criar Acesso</span>
+                </>
+              )}
             </button>
           </div>
         </div>

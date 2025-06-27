@@ -35,6 +35,11 @@ interface BenchmarkData {
   gasto_marketing_medio: number;
   total_restaurantes: number;
   fonte: string;
+  faturamento_medio_mensal: number;
+  pedidos_medio_mensal: number;
+  ocupacao_media: number;
+  rotatividade_media: number;
+  taxa_conversao_media: number;
 }
 
 interface MonthlyData {
@@ -167,7 +172,12 @@ export const Dashboard: React.FC = () => {
             taxa_media_venda: 15.0,
             gasto_marketing_medio: 5.0,
             total_restaurantes: 100,
-            fonte: 'simulado_default'
+            fonte: 'simulado_default',
+            faturamento_medio_mensal: 35000.0,
+            pedidos_medio_mensal: 1000,
+            ocupacao_media: 65.0,
+            rotatividade_media: 2.5,
+            taxa_conversao_media: 75.0
           });
         }
       } catch (error) {
@@ -182,7 +192,12 @@ export const Dashboard: React.FC = () => {
           taxa_media_venda: 15.0,
           gasto_marketing_medio: 5.0,
           total_restaurantes: 100,
-          fonte: 'simulado_fallback'
+          fonte: 'simulado_fallback',
+          faturamento_medio_mensal: 35000.0,
+          pedidos_medio_mensal: 1000,
+          ocupacao_media: 65.0,
+          rotatividade_media: 2.5,
+          taxa_conversao_media: 75.0
         });
       }
 
@@ -324,6 +339,20 @@ export const Dashboard: React.FC = () => {
     };
     
     return marketData[channelName as keyof typeof marketData] || { percentage: 10, avgTicket: benchmarkData?.ticket_medio || 35 };
+  };
+
+  // Função para calcular o valor de mercado proporcional ao período
+  const getProportionalMarketValue = (monthlyValue: number): number => {
+    const { start, end } = getDateRange();
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    
+    // Calcular número de dias no período
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 para incluir o dia final
+    
+    // Calcular valor proporcional (assumindo mês com 30 dias)
+    return (monthlyValue / 30) * diffDays;
   };
 
   // NOVO: Função para abrir modal de vendas
@@ -544,7 +573,7 @@ export const Dashboard: React.FC = () => {
                 <ComparisonCard
                   title="Faturamento Total"
                   myValue={totalRevenue}
-                  marketValue={benchmarkData.ticket_medio * totalOrders * 0.8}
+                  marketValue={getProportionalMarketValue(benchmarkData.faturamento_medio_mensal)}
                   format="currency"
                   icon={DollarSign}
                   color="bg-green-600"
@@ -566,7 +595,7 @@ export const Dashboard: React.FC = () => {
                 <ComparisonCard
                   title="Quantidade de Pedidos"
                   myValue={totalOrders}
-                  marketValue={Math.round(totalOrders * 1.2)}
+                  marketValue={getProportionalMarketValue(benchmarkData.pedidos_medio_mensal)}
                   format="number"
                   icon={ShoppingCart}
                   color="bg-blue-600"

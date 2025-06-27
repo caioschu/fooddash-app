@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, Eye, EyeOff, Save, X, Users, Shield, Clock, Mail, User, Key, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, Save, X, Users, Shield, Clock, Mail, User, Key, CheckCircle, XCircle, Settings, BarChart3, CreditCard, TrendingUp, Building2 } from 'lucide-react';
 import { useRestaurant } from '../../hooks/useRestaurant';
 import { useToast } from '../../hooks/useToast';
 import { supabase } from '../../lib/supabase';
@@ -16,6 +16,10 @@ interface UserAccess {
     expenses: boolean;
     dre: boolean;
     profile: boolean;
+    dashboard: boolean;
+    analytics: boolean;
+    reports: boolean;
+    settings: boolean;
   };
   active: boolean;
   last_login: string | null;
@@ -32,6 +36,10 @@ interface NewAccessForm {
     expenses: boolean;
     dre: boolean;
     profile: boolean;
+    dashboard: boolean;
+    analytics: boolean;
+    reports: boolean;
+    settings: boolean;
   };
 }
 
@@ -44,6 +52,7 @@ export const AccessManagement: React.FC = () => {
   const [showNewForm, setShowNewForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   
   const [newAccess, setNewAccess] = useState<NewAccessForm>({
     name: '',
@@ -53,7 +62,11 @@ export const AccessManagement: React.FC = () => {
       sales: true,
       expenses: true,
       dre: false,
-      profile: false
+      profile: false,
+      dashboard: true,
+      analytics: false,
+      reports: false,
+      settings: false
     }
   });
 
@@ -113,27 +126,35 @@ export const AccessManagement: React.FC = () => {
       return;
     }
 
+    setIsCreating(true);
     try {
-      // Hash da senha (em produção, usar bcrypt adequado)
-      const passwordHash = btoa(newAccess.password); // Simplificado para demo
+      // Call edge function to hash password and create access
+      const { data: userData } = await supabase.auth.getUser();
       
-      const { data, error } = await supabase
-        .from('user_accesses')
-        .insert([{
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-employee-access`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           restaurant_id: restaurant.id,
+          created_by: userData.user?.id,
           name: newAccess.name,
           email: newAccess.email,
-          password_hash: passwordHash,
+          password: newAccess.password,
           permissions: newAccess.permissions
-        }])
-        .select();
+        })
+      });
 
-      if (error) {
-        if (error.code === '23505') { // Unique violation
+      const result = await response.json();
+
+      if (!response.ok) {
+        if (result.error === 'Email already exists') {
           showError('Email já existe', 'Este email já está sendo usado por outro acesso.');
           return;
         }
-        throw error;
+        throw new Error(result.error || 'Failed to create access');
       }
 
       showSuccess('Acesso criado!', `Acesso para ${newAccess.name} foi criado com sucesso.`);
@@ -146,7 +167,11 @@ export const AccessManagement: React.FC = () => {
           sales: true,
           expenses: true,
           dre: false,
-          profile: false
+          profile: false,
+          dashboard: true,
+          analytics: false,
+          reports: false,
+          settings: false
         }
       });
       setShowNewForm(false);
@@ -155,6 +180,8 @@ export const AccessManagement: React.FC = () => {
     } catch (error) {
       console.error('Error creating access:', error);
       showError('Erro ao criar acesso', 'Não foi possível criar o acesso.');
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -247,24 +274,63 @@ export const AccessManagement: React.FC = () => {
     }
   };
 
-  const getPermissionLabel = (key: string) => {
-    const labels = {
-      sales: 'Vendas',
-      expenses: 'Despesas',
-      dre: 'DRE',
-      profile: 'Perfil'
+  const getPermissionInfo = (key: string) => {
+    const permissions = {
+      sales: { 
+        label: 'Vendas', 
+        description: 'Pode adicionar, editar e visualizar vendas',
+        icon: TrendingUp,
+        color: 'text-green-600'
+      },
+      expenses: { 
+        label: 'Despesas', 
+        description: 'Pode adicionar, editar e visualizar despesas',
+        icon: CreditCard,
+        color: 'text-red-600'
+      },
+      dre: { 
+        label: 'DRE', 
+        description: 'Pode visualizar relatórios DRE e análises',
+        icon: BarChart3,
+        color: 'text-blue-600'
+      },
+      profile: { 
+        label: 'Perfil', 
+        description: 'Pode editar informações do restaurante',
+        icon: Building2,
+        color: 'text-purple-600'
+      },
+      dashboard: { 
+        label: 'Dashboard', 
+        description: 'Pode visualizar o painel principal',
+        icon: BarChart3,
+        color: 'text-orange-600'
+      },
+      analytics: { 
+        label: 'Análises', 
+        description: 'Pode acessar análises avançadas',
+        icon: BarChart3,
+        color: 'text-indigo-600'
+      },
+      reports: { 
+        label: 'Relatórios', 
+        description: 'Pode gerar e visualizar relatórios',
+        icon: BarChart3,
+        color: 'text-teal-600'
+      },
+      settings: { 
+        label: 'Configurações', 
+        description: 'Pode alterar configurações do sistema',
+        icon: Settings,
+        color: 'text-gray-600'
+      }
     };
-    return labels[key as keyof typeof labels] || key;
-  };
-
-  const getPermissionDescription = (key: string) => {
-    const descriptions = {
-      sales: 'Pode adicionar, editar e visualizar vendas',
-      expenses: 'Pode adicionar, editar e visualizar despesas',
-      dre: 'Pode visualizar relatórios DRE e análises',
-      profile: 'Pode editar informações do restaurante'
+    return permissions[key as keyof typeof permissions] || { 
+      label: key, 
+      description: '', 
+      icon: Settings, 
+      color: 'text-gray-600' 
     };
-    return descriptions[key as keyof typeof descriptions] || '';
   };
 
   if (isLoading) {
@@ -277,7 +343,7 @@ export const AccessManagement: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6 bg-gray-50 min-h-screen">
       {/* Confirm Dialog */}
       <ConfirmDialog
         isOpen={confirmDialog.isOpen}
@@ -294,11 +360,11 @@ export const AccessManagement: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center">
-            <Shield className="w-5 h-5 mr-2 text-orange-600" />
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+            <Shield className="w-7 h-7 mr-3 text-orange-600" />
             Gestão de Acessos
-          </h3>
-          <p className="text-sm text-gray-600 mt-1">
+          </h1>
+          <p className="text-gray-600 mt-1">
             Crie acessos para funcionários com permissões específicas
           </p>
         </div>
@@ -313,8 +379,8 @@ export const AccessManagement: React.FC = () => {
 
       {/* New Access Form */}
       {showNewForm && (
-        <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
-          <h4 className="text-md font-semibold text-gray-900 mb-4">Criar Novo Acesso</h4>
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Criar Novo Acesso</h2>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
             <div>
@@ -368,31 +434,39 @@ export const AccessManagement: React.FC = () => {
 
           {/* Permissions */}
           <div className="mb-6">
-            <h5 className="text-sm font-medium text-gray-700 mb-3">Permissões</h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {Object.entries(newAccess.permissions).map(([key, value]) => (
-                <label
-                  key={key}
-                  className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={value}
-                    onChange={(e) => setNewAccess(prev => ({
-                      ...prev,
-                      permissions: {
-                        ...prev.permissions,
-                        [key]: e.target.checked
-                      }
-                    }))}
-                    className="mt-1 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                  />
-                  <div>
-                    <div className="font-medium text-gray-900">{getPermissionLabel(key)}</div>
-                    <div className="text-xs text-gray-600">{getPermissionDescription(key)}</div>
-                  </div>
-                </label>
-              ))}
+            <h3 className="text-sm font-medium text-gray-700 mb-3">Permissões</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+              {Object.entries(newAccess.permissions).map(([key, value]) => {
+                const permInfo = getPermissionInfo(key);
+                const IconComponent = permInfo.icon;
+                
+                return (
+                  <label
+                    key={key}
+                    className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={value}
+                      onChange={(e) => setNewAccess(prev => ({
+                        ...prev,
+                        permissions: {
+                          ...prev.permissions,
+                          [key]: e.target.checked
+                        }
+                      }))}
+                      className="mt-1 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2">
+                        <IconComponent className={`w-4 h-4 ${permInfo.color}`} />
+                        <span className="font-medium text-gray-900">{permInfo.label}</span>
+                      </div>
+                      <div className="text-xs text-gray-600 mt-1">{permInfo.description}</div>
+                    </div>
+                  </label>
+                );
+              })}
             </div>
           </div>
 
@@ -400,15 +474,26 @@ export const AccessManagement: React.FC = () => {
             <button
               onClick={() => setShowNewForm(false)}
               className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              disabled={isCreating}
             >
               Cancelar
             </button>
             <button
               onClick={handleCreateAccess}
-              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center space-x-2"
+              disabled={isCreating}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Save className="w-4 h-4" />
-              <span>Criar Acesso</span>
+              {isCreating ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span>Criando...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Criar Acesso</span>
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -424,7 +509,7 @@ export const AccessManagement: React.FC = () => {
           </div>
         ) : (
           accesses.map((access) => (
-            <div key={access.id} className="bg-white p-6 rounded-xl border border-gray-200">
+            <div key={access.id} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-3">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
@@ -516,36 +601,43 @@ export const AccessManagement: React.FC = () => {
               {/* Permissions */}
               <div className="mb-4">
                 <h5 className="text-sm font-medium text-gray-700 mb-2">Permissões:</h5>
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(editingId === access.id ? editForm.permissions || access.permissions : access.permissions).map(([key, value]) => (
-                    <div key={key}>
-                      {editingId === access.id ? (
-                        <label className="flex items-center space-x-2 px-3 py-1 border border-gray-300 rounded-full cursor-pointer hover:bg-gray-50">
-                          <input
-                            type="checkbox"
-                            checked={value}
-                            onChange={(e) => setEditForm(prev => ({
-                              ...prev,
-                              permissions: {
-                                ...prev.permissions,
-                                [key]: e.target.checked
-                              }
-                            }))}
-                            className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                          />
-                          <span className="text-xs font-medium text-gray-700">{getPermissionLabel(key)}</span>
-                        </label>
-                      ) : (
-                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                          value 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {getPermissionLabel(key)}
-                        </span>
-                      )}
-                    </div>
-                  ))}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {Object.entries(editingId === access.id ? editForm.permissions || access.permissions : access.permissions).map(([key, value]) => {
+                    const permInfo = getPermissionInfo(key);
+                    const IconComponent = permInfo.icon;
+                    
+                    return (
+                      <div key={key}>
+                        {editingId === access.id ? (
+                          <label className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
+                            <input
+                              type="checkbox"
+                              checked={value}
+                              onChange={(e) => setEditForm(prev => ({
+                                ...prev,
+                                permissions: {
+                                  ...prev.permissions,
+                                  [key]: e.target.checked
+                                }
+                              }))}
+                              className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                            />
+                            <IconComponent className={`w-4 h-4 ${permInfo.color}`} />
+                            <span className="text-xs font-medium text-gray-700">{permInfo.label}</span>
+                          </label>
+                        ) : (
+                          <div className={`flex items-center space-x-2 px-3 py-2 text-xs font-medium rounded-lg ${
+                            value 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            <IconComponent className={`w-3 h-3 ${value ? permInfo.color : 'text-gray-400'}`} />
+                            <span>{permInfo.label}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -567,12 +659,16 @@ export const AccessManagement: React.FC = () => {
         <div className="flex items-start space-x-3">
           <Shield className="w-5 h-5 text-blue-600 mt-0.5" />
           <div>
-            <h4 className="text-sm font-medium text-blue-900">Como funciona</h4>
+            <h4 className="text-sm font-medium text-blue-900">Como funciona o sistema de acessos</h4>
             <ul className="text-sm text-blue-800 mt-1 space-y-1">
               <li>• <strong>Vendas:</strong> Permite adicionar e visualizar vendas</li>
               <li>• <strong>Despesas:</strong> Permite adicionar e visualizar despesas</li>
               <li>• <strong>DRE:</strong> Permite visualizar relatórios financeiros</li>
               <li>• <strong>Perfil:</strong> Permite editar informações do restaurante</li>
+              <li>• <strong>Dashboard:</strong> Permite visualizar o painel principal</li>
+              <li>• <strong>Análises:</strong> Permite acessar análises avançadas</li>
+              <li>• <strong>Relatórios:</strong> Permite gerar relatórios</li>
+              <li>• <strong>Configurações:</strong> Permite alterar configurações</li>
             </ul>
             <p className="text-xs text-blue-700 mt-2">
               💡 <strong>Dica:</strong> Funcionários usarão o mesmo sistema com login separado e acesso limitado às funcionalidades permitidas.

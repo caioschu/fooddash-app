@@ -1,5 +1,6 @@
 import { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
+import { AuthApiError } from '@supabase/supabase-js';
 import { User } from '../types';
 
 interface AuthContextType {
@@ -28,6 +29,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Force logout function to handle invalid refresh tokens
+  const forceLogout = async () => {
+    console.log('Force logout triggered due to invalid refresh token');
+    
+    // Clear local state
+    setUser(null);
+    setError(null);
+    setIsLoading(false);
+    
+    // Clear Supabase auth tokens from local storage
+    try {
+      // Remove auth tokens from localStorage
+      const keys = Object.keys(localStorage);
+      keys.forEach(key => {
+        if (key.startsWith('sb-') && key.includes('auth-token')) {
+          localStorage.removeItem(key);
+        }
+      });
+      
+      // Also try to clear session storage
+      const sessionKeys = Object.keys(sessionStorage);
+      sessionKeys.forEach(key => {
+        if (key.startsWith('sb-') && key.includes('auth-token')) {
+          sessionStorage.removeItem(key);
+        }
+      });
+    } catch (storageError) {
+      console.warn('Error clearing auth tokens from storage:', storageError);
+    }
+  };
 
   // Função auxiliar para buscar dados do usuário
   const fetchUserData = async (sessionUser: any): Promise<User> => {
@@ -69,6 +101,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         if (sessionError) {
           console.error('Error getting session:', sessionError);
+          
+          // Check if the error is related to invalid refresh token
+          if (sessionError.message?.includes('refresh_token_not_found') || 
+              sessionError.message?.includes('Invalid Refresh Token')) {
+            console.log('Invalid refresh token detected, forcing logout');
+            await forceLogout();
+            return;
+          }
+          
           if (mounted) {
             setError(sessionError.message);
             setIsLoading(false);
@@ -94,6 +135,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
+        
+        // Check if the error is related to invalid refresh token
+        if (error instanceof Error && 
+            (error.message?.includes('refresh_token_not_found') || 
+             error.message?.includes('Invalid Refresh Token'))) {
+          console.log('Invalid refresh token detected in catch block, forcing logout');
+          await forceLogout();
+          return;
+        }
+        
         if (mounted) {
           setError(error instanceof Error ? error.message : 'Unknown error');
           setIsLoading(false);
@@ -109,6 +160,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       try {
         console.log('Auth state changed:', event);
+
+        // Handle token refresh errors
+        if (event === 'TOKEN_REFRESHED' && !session) {
+          console.log('Token refresh failed, forcing logout');
+          await forceLogout();
+          return;
+        }
 
         if (event === 'SIGNED_IN' && session?.user) {
           const userData: User = {
@@ -126,6 +184,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setIsLoading(false);
       } catch (error) {
         console.error('Error in auth state change:', error);
+        
+        // Check if the error is related to invalid refresh token
+        if (error instanceof Error && 
+            (error.message?.includes('refresh_token_not_found') || 
+             error.message?.includes('Invalid Refresh Token'))) {
+          console.log('Invalid refresh token detected in auth state change, forcing logout');
+          await forceLogout();
+          return;
+        }
+        
         if (mounted) {
           setError(error instanceof Error ? error.message : 'Unknown error');
           setIsLoading(false);
@@ -149,21 +217,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (error) {
         console.error('Login error:', error);
         
-        // Provide more specific error messages
+        // Provide more specific error messages with actionable guidance
         if (error.message === 'Invalid login credentials') {
           return { 
             success: false, 
-            error: 'Email ou senha incorretos. Verifique suas credenciais e certifique-se de que seu email foi confirmado.' 
+            error: 'Email ou senha incorretos. Verifique suas credenciais e certifique-se de que confirmou seu email.' 
           };
         } else if (error.message === 'Email not confirmed') {
           return { 
             success: false, 
-            error: 'Por favor, confirme seu email antes de fazer login. Verifique sua caixa de entrada.' 
+            error: 'Email não confirmado. Verifique sua caixa de entrada (incluindo spam) e clique no link de confirmação.' 
           };
         } else if (error.message === 'Too many requests') {
           return { 
             success: false, 
             error: 'Muitas tentativas de login. Aguarde alguns minutos antes de tentar novamente.' 
+          };
+        } else if (error.message.includes('signup_disabled')) {
+          return { 
+            success: false, 
+            error: 'Cadastros estão temporariamente desabilitados. Tente novamente mais tarde.' 
+          };
+        } else if (error.message.includes('email_address_invalid')) {
+          return { 
+            success: false, 
+            error: 'Formato de email inválido. Verifique se digitou corretamente.' 
           };
         } else {
           return { 
@@ -178,7 +256,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error('Login error:', error);
       return { 
         success: false, 
-        error: 'Erro inesperado ao fazer login. Tente novamente.' 
+        error: 'Erro inesperado ao fazer login. Verifique sua conexão e tente novamente.' 
       };
     }
   };
@@ -197,7 +275,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) {
         console.error('Registration error:', error);
-        return { success: false, error: error.message };
+        
+        // Provide more specific error messages for registration
+        if (error.message.includes('User already registered')) {
+          return { 
+            success: false, 
+            error: 'Este email já está cadastrado. Tente fazer login ou use a opção "Esqueci minha senha".' 
+          };
+        } else if (error.message.includes('Password should be at least')) {
+          return { 
+            success: false, 
+            error: 'A senha deve ter pelo menos 6 caracteres.' 
+          };
+        } else if (error.message.includes('signup_disabled')) {
+          return { 
+            success: false, 
+            error: 'Cadastros estão temporariamente desabilitados. Tente novamente mais tarde.' 
+          };
+        } else if (error.message.includes('email_address_invalid')) {
+          return { 
+            success: false, 
+            error: 'Formato de email inválido. Verifique se digitou corretamente.' 
+          };
+        } else {
+          return { 
+            success: false, 
+            error: error.message || 'Erro ao criar conta. Tente novamente.' 
+          };
+        }
       }
 
       // Tentar criar usuário na tabela users (opcional)
@@ -221,15 +326,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return { success: true };
     } catch (error) {
       console.error('Registration error:', error);
-      return { success: false, error: 'Erro inesperado ao criar conta. Tente novamente.' };
+      return { 
+        success: false, 
+        error: 'Erro inesperado ao criar conta. Verifique sua conexão e tente novamente.' 
+      };
     }
   };
 
   const logout = async () => {
     try {
-      await supabase.auth.signOut();
+      // Check if there's an active session before attempting to sign out
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        // Only attempt to sign out if there's an active session
+        await supabase.auth.signOut();
+      } else {
+        // No active session, user is already effectively logged out
+        console.log('No active session found, user already logged out');
+      }
     } catch (error) {
-      console.error('Error during logout:', error);
+      // Handle specific case where session is already invalid
+      if (error instanceof AuthApiError && 
+          error.status === 403 && 
+          error.message.includes('Session from session_id claim in JWT does not exist')) {
+        console.warn('Session already invalid during logout - user is effectively logged out');
+      } else if (error instanceof Error && 
+                 (error.message?.includes('refresh_token_not_found') || 
+                  error.message?.includes('Invalid Refresh Token'))) {
+        console.warn('Invalid refresh token during logout - forcing cleanup');
+        await forceLogout();
+        return;
+      } else {
+        console.error('Error during logout:', error);
+      }
     } finally {
       setUser(null);
     }

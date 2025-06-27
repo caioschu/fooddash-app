@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, TrendingUp, DollarSign, ShoppingCart, Edit, Trash2, X, Check, AlertCircle, Filter, Search, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Calendar, TrendingUp, DollarSign, ShoppingCart, Edit, Trash2, X, Check, AlertCircle, Filter, Search, ArrowUp, ArrowDown, FileSpreadsheet } from 'lucide-react';
 import { useRestaurant } from '../../hooks/useRestaurant';
 import { useDateFilter } from '../../hooks/useDateFilter';
 import { useToast } from '../../hooks/useToast';
 import { DateFilterSelector } from '../../components/Common/DateFilterSelector';
 import { ConfirmDialog } from '../../components/Common/ConfirmDialog';
+import { SaiposUploadModal } from '../../components/SaiposUploadModal';
 import { supabase } from '../../lib/supabase';
 
 interface Sale {
@@ -44,6 +45,27 @@ interface SalesLaunch {
   };
 }
 
+interface ProcessedSalesData {
+  data: string;
+  canais: Record<string, { valor: number; pedidos: number }>;
+  pagamentos: Record<string, number>;
+  pedidos: number;
+  faturamento: number;
+}
+
+interface ConflictData {
+  data: string;
+  existingValue: number;
+  newValue: number;
+  existingOrders: number;
+  newOrders: number;
+}
+
+interface ConflictResolution {
+  action: 'replace' | 'keep' | 'sum' | 'individual';
+  individualChoices?: Record<string, 'replace' | 'keep' | 'sum'>;
+}
+
 export const SalesPage: React.FC = () => {
   const { restaurant, salesChannels, paymentMethods } = useRestaurant();
   const { filterType, getDateRange, getFilterLabel, setFilterType } = useDateFilter();
@@ -55,11 +77,13 @@ export const SalesPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showSaiposUpload, setShowSaiposUpload] = useState(false);
   const [editingLaunch, setEditingLaunch] = useState<SalesLaunch | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterChannel, setFilterChannel] = useState('');
   const [filterPayment, setFilterPayment] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [isImporting, setIsImporting] = useState(false);
   const itemsPerPage = 15;
   
   // Confirm dialog states
@@ -137,6 +161,7 @@ export const SalesPage: React.FC = () => {
       if (event.key === 'Escape') {
         setShowAddModal(false);
         setShowEditModal(false);
+        setShowSaiposUpload(false);
       }
     };
 
@@ -212,6 +237,45 @@ export const SalesPage: React.FC = () => {
       showError('Erro ao carregar vendas', 'Não foi possível carregar os dados de vendas.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Função para verificar conflitos
+  const checkConflicts = async (dates: string[]): Promise<ConflictData[]> => {
+    if (!restaurant) return [];
+    
+    try {
+      const { data: existingSales, error } = await supabase
+        .from('sales')
+        .select('data, valor_bruto, numero_pedidos')
+        .eq('restaurant_id', restaurant.id)
+        .in('data', dates);
+
+      if (error) throw error;
+
+      // Agrupar vendas existentes por data
+      const existingByDate: Record<string, { value: number; orders: number }> = {};
+      
+      (existingSales || []).forEach(sale => {
+        if (!existingByDate[sale.data]) {
+          existingByDate[sale.data] = { value: 0, orders: 0 };
+        }
+        existingByDate[sale.data].value += sale.valor_bruto;
+        existingByDate[sale.data].orders += sale.numero_pedidos;
+      });
+
+      return dates
+        .filter(date => existingByDate[date])
+        .map(date => ({
+          data: date,
+          existingValue: existingByDate[date].value,
+          newValue: 0, // Será preenchido pelo modal
+          existingOrders: existingByDate[date].orders,
+          newOrders: 0 // Será preenchido pelo modal
+        }));
+    } catch (error) {
+      console.error('Error checking conflicts:', error);
+      return [];
     }
   };
 
@@ -449,6 +513,164 @@ export const SalesPage: React.FC = () => {
       );
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSaiposDataProcessed = async (processedData: ProcessedSalesData[], conflictResolution?: ConflictResolution) => {
+    if (!restaurant) return;
+    
+    setIsImporting(true);
+    try {
+      let salesRecords: any[] = [];
+      let totalOriginal = 0;
+      let totalCalculado = 0;
+      
+      // Calcular total original dos dados processados
+      processedData.forEach(dayData => {
+        totalOriginal += dayData.faturamento;
+      });
+      
+      console.log('🔍 DEBUG IMPORTAÇÃO SAIPOS - COM RESOLUÇÃO DE CONFLITOS');
+      console.log('📊 Total original dos dados:', totalOriginal.toLocaleString('pt-BR', { minimumFractionDigits: 2 }));
+      
+      if (conflictResolution) {
+        console.log('🔧 Resolução de conflitos:', conflictResolution.action);
+      }
+      
+      // Processar conflitos se houver resolução
+      if (conflictResolution) {
+        for (const dayData of processedData) {
+          // Verificar se há dados existentes para esta data
+          const { data: existingSales } = await supabase
+            .from('sales')
+            .select('*')
+            .eq('restaurant_id', restaurant.id)
+            .eq('data', dayData.data);
+          
+          if (existingSales && existingSales.length > 0) {
+            // Há conflito, aplicar resolução
+            let action = conflictResolution.action;
+            
+            if (conflictResolution.action === 'individual' && conflictResolution.individualChoices) {
+              action = conflictResolution.individualChoices[dayData.data] || 'replace';
+            }
+            
+            switch (action) {
+              case 'keep':
+                console.log(`📅 ${dayData.data}: Mantendo dados existentes`);
+                continue; // Pula este dia
+                
+              case 'replace':
+                console.log(`📅 ${dayData.data}: Substituindo dados existentes`);
+                // Deletar dados existentes
+                await supabase
+                  .from('sales')
+                  .delete()
+                  .eq('restaurant_id', restaurant.id)
+                  .eq('data', dayData.data);
+                
+                // Deletar despesas automáticas relacionadas
+                await supabase
+                  .from('expenses')
+                  .delete()
+                  .eq('restaurant_id', restaurant.id)
+                  .eq('data', dayData.data)
+                  .eq('origem_automatica', true);
+                break;
+                
+              case 'sum':
+                console.log(`📅 ${dayData.data}: Somando aos dados existentes`);
+                // Não deleta, apenas adiciona
+                break;
+            }
+          }
+          
+          // Processar o dia normalmente
+          await processDayData(dayData, salesRecords);
+        }
+      } else {
+        // Não há conflitos, processar normalmente
+        for (const dayData of processedData) {
+          await processDayData(dayData, salesRecords);
+        }
+      }
+      
+      // Função auxiliar para processar os dados de um dia
+      async function processDayData(dayData: ProcessedSalesData, salesRecords: any[]) {
+        console.log(`\n📅 Processando: ${dayData.data}`);
+        console.log('Faturamento do dia:', dayData.faturamento.toLocaleString('pt-BR', { minimumFractionDigits: 2 }));
+        
+        let totalDiaCalculado = 0;
+        
+        // Para cada canal
+        Object.entries(dayData.canais).forEach(([channelName, channelData]) => {
+          // Para cada forma de pagamento, distribuir proporcionalmente
+          const totalPagamentos = Object.values(dayData.pagamentos).reduce((sum, valor) => sum + valor, 0);
+          
+          Object.entries(dayData.pagamentos).forEach(([paymentName, paymentValue]) => {
+            const proportionalValue = (channelData.valor * paymentValue) / totalPagamentos;
+            const proportionalOrders = Math.round((channelData.pedidos * paymentValue) / totalPagamentos);
+            
+            // Aceitar registros com valor > 0, mesmo com 0 pedidos
+            const finalOrders = proportionalValue > 1 && proportionalOrders === 0 ? 1 : proportionalOrders;
+            
+            if (proportionalValue > 0) {
+              totalDiaCalculado += proportionalValue;
+              totalCalculado += proportionalValue;
+              
+              salesRecords.push({
+                restaurant_id: restaurant.id,
+                data: dayData.data,
+                canal: channelName,
+                forma_pagamento: paymentName,
+                valor_bruto: proportionalValue,
+                numero_pedidos: finalOrders,
+                ticket_medio: finalOrders > 0 ? proportionalValue / finalOrders : proportionalValue
+              });
+              
+              console.log(`      ✅ Registro criado: R$ ${proportionalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} - ${finalOrders} pedidos`);
+            }
+          });
+        });
+        
+        console.log(`📊 Total calculado para o dia: R$ ${totalDiaCalculado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`);
+      }
+      
+      console.log('\n🎯 RESUMO FINAL:');
+      console.log('Total original:', totalOriginal.toLocaleString('pt-BR', { minimumFractionDigits: 2 }));
+      console.log('Total calculado:', totalCalculado.toLocaleString('pt-BR', { minimumFractionDigits: 2 }));
+      console.log('Registros a inserir:', salesRecords.length);
+
+      // Inserir todos os registros
+      if (salesRecords.length > 0) {
+        const { error } = await supabase
+          .from('sales')
+          .insert(salesRecords);
+
+        if (error) throw error;
+
+        console.log('✅ Registros inseridos no banco');
+
+        // Criar despesas automáticas para taxas
+        console.log('🏷️ Criando despesas automáticas...');
+        await createAutomaticExpenses(salesRecords);
+      }
+
+      // Atualizar dados
+      await fetchSales();
+      
+      showSuccess(
+        'Dados do Saipos importados com sucesso!',
+        `${salesRecords.length} registros foram criados a partir dos dados do Saipos.`
+      );
+    } catch (error) {
+      console.error('Error importing Saipos data:', error);
+      showError(
+        'Erro ao importar dados do Saipos',
+        'Não foi possível importar os dados. Verifique o arquivo e tente novamente.'
+      );
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -732,6 +954,16 @@ export const SalesPage: React.FC = () => {
         isLoading={confirmDialog.isLoading}
       />
 
+      {/* Saipos Upload Modal */}
+      <SaiposUploadModal
+        isOpen={showSaiposUpload}
+        onClose={() => setShowSaiposUpload(false)}
+        onDataProcessed={handleSaiposDataProcessed}
+        onCheckConflicts={checkConflicts}
+        activeChannels={activeChannels}
+        activePaymentMethods={activePaymentMethods}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -740,13 +972,30 @@ export const SalesPage: React.FC = () => {
         </div>
         <div className="flex items-center space-x-3">
           <DateFilterSelector />
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors flex items-center space-x-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Adicionar Vendas</span>
-          </button>
+          
+          {/* Grupo de botões de adicionar */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors flex items-center space-x-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Adicionar Manual</span>
+            </button>
+            
+            <button
+              onClick={() => setShowSaiposUpload(true)}
+              disabled={isImporting}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
+            >
+              {isImporting ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <FileSpreadsheet className="w-4 h-4" />
+              )}
+              <span>{isImporting ? 'Importando...' : 'Importar Saipos'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1022,163 +1271,262 @@ export const SalesPage: React.FC = () => {
       {/* Add Sales Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
+          <div className="bg-white rounded-xl shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-red-50">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900">Adicionar Vendas</h2>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Adicionar Vendas</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Registre suas vendas de forma rápida e organizada
+                  </p>
+                </div>
                 <button
                   onClick={() => setShowAddModal(false)}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white hover:shadow-md rounded-lg transition-all duration-200"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-6 h-6" />
                 </button>
               </div>
-              <p className="text-sm text-gray-600 mt-2">
-                Preencha os dados de vendas. Para períodos múltiplos, os valores serão distribuídos igualmente entre os dias.
-              </p>
             </div>
 
-            <div className="p-6 space-y-6">
-              {/* Date Range */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Data Início</label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  />
+            <div className="p-6 space-y-8">
+              {/* Período */}
+              <div className="bg-white rounded-xl border border-blue-200 shadow-sm">
+                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-xl border-b border-blue-200">
+                  <h3 className="text-lg font-semibold text-blue-800 flex items-center">
+                    <Calendar className="w-5 h-5 mr-2" />
+                    Período das Vendas
+                  </h3>
+                  <p className="text-sm text-blue-700 mt-1">Selecione as datas para o lançamento</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Data Fim</label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                  />
+                
+                <div className="p-6">
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-3">Data Início</label>
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-3">Data Fim</label>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium"
+                      />
+                    </div>
+                  </div>
+                  
+                  {startDate !== endDate && (
+                    <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                      <p className="text-sm text-blue-800">
+                        <strong>Período múltiplo:</strong> Os valores serão distribuídos igualmente entre {
+                          Math.ceil((new Date(endDate + 'T00:00:00').getTime() - new Date(startDate + 'T00:00:00').getTime()) / (1000 * 3600 * 24)) + 1
+                        } dias
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Instructions */}
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-800">
-                  <strong>Instruções:</strong> Preencha apenas os canais e formas de pagamento que foram utilizados. 
-                  Os totais de canais e formas de pagamento devem ser iguais. Informe também a quantidade de pedidos por canal.
-                </p>
+              {/* Dica */}
+              <div className="bg-gradient-to-r from-amber-50 to-yellow-50 p-4 rounded-xl border border-amber-200">
+                <div className="flex items-start space-x-3">
+                  <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <AlertCircle className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-amber-800 mb-1">Dica Importante</h4>
+                    <p className="text-sm text-amber-700">
+                      Preencha apenas os canais e formas de pagamento que foram utilizados. 
+                      Os <strong>totais de canais e formas de pagamento devem ser iguais</strong>. 
+                      Informe também a quantidade de pedidos por canal.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Sales Channels */}
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-3 text-orange-700">Canais de Venda</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {activeChannels.map((channel) => (
-                    <div key={channel.id} className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        {channel.nome}
-                      </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={channelData[channel.nome] || ''}
-                          onChange={(e) => setChannelData(prev => ({
-                            ...prev,
-                            [channel.nome]: e.target.value
-                          }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                          placeholder="R$ 0,00"
-                        />
-                        <input
-                          type="number"
-                          value={channelOrdersData[channel.nome] || ''}
-                          onChange={(e) => setChannelOrdersData(prev => ({
-                            ...prev,
-                            [channel.nome]: e.target.value
-                          }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                          placeholder="Qtd pedidos"
-                        />
+              <div className="bg-white rounded-xl border border-orange-200 shadow-sm">
+                <div className="p-4 bg-gradient-to-r from-orange-50 to-red-50 rounded-t-xl border-b border-orange-200">
+                  <h3 className="text-lg font-semibold text-orange-800 flex items-center">
+                    <ShoppingCart className="w-5 h-5 mr-2" />
+                    Canais de Venda
+                  </h3>
+                  <p className="text-sm text-orange-700 mt-1">Distribua o faturamento entre os canais utilizados</p>
+                </div>
+                
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {activeChannels.map((channel) => (
+                      <div key={channel.id} className="group">
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">
+                          {channel.nome}
+                          {channel.taxa_percentual > 0 && (
+                            <span className="ml-2 text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">
+                              Taxa: {channel.taxa_percentual}%
+                            </span>
+                          )}
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm font-medium">R$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={channelData[channel.nome] || ''}
+                              onChange={(e) => setChannelData(prev => ({
+                                ...prev,
+                                [channel.nome]: e.target.value
+                              }))}
+                              className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm font-medium group-hover:border-orange-300 transition-colors"
+                              placeholder="0,00"
+                            />
+                          </div>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              value={channelOrdersData[channel.nome] || ''}
+                              onChange={(e) => setChannelOrdersData(prev => ({
+                                ...prev,
+                                [channel.nome]: e.target.value
+                              }))}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm font-medium group-hover:border-orange-300 transition-colors"
+                              placeholder="Qtd pedidos"
+                            />
+                            <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-xs">pedidos</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="mt-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center">
+                        <TrendingUp className="w-5 h-5 text-orange-600 mr-2" />
+                        <span className="font-semibold text-orange-800">Totais dos Canais</span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-bold text-orange-700">
+                          R$ {getTotalChannelValue(channelData).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-sm text-orange-600">
+                          {getTotalChannelOrders(channelOrdersData)} pedidos
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-                <div className="mt-2 flex justify-between text-sm">
-                  <span className="font-medium text-orange-700">
-                    Total Faturamento: R$ {getTotalChannelValue(channelData).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                  <span className="font-medium text-orange-700">
-                    Total Pedidos: {getTotalChannelOrders(channelOrdersData)}
-                  </span>
+                  </div>
                 </div>
               </div>
 
               {/* Payment Methods */}
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-3 text-green-700">Formas de Pagamento</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {activePaymentMethods.map((method) => (
-                    <div key={method.id}>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {method.nome}
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={paymentData[method.nome] || ''}
-                        onChange={(e) => setPaymentData(prev => ({
-                          ...prev,
-                          [method.nome]: e.target.value
-                        }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                        placeholder="R$ 0,00"
-                      />
-                    </div>
-                  ))}
+              <div className="bg-white rounded-xl border border-green-200 shadow-sm">
+                <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-t-xl border-b border-green-200">
+                  <h3 className="text-lg font-semibold text-green-800 flex items-center">
+                    <DollarSign className="w-5 h-5 mr-2" />
+                    Formas de Pagamento
+                  </h3>
+                  <p className="text-sm text-green-700 mt-1">Distribua o faturamento entre as formas de pagamento</p>
                 </div>
-                <div className="mt-2 text-right">
-                  <span className="text-sm font-medium text-green-700">
-                    Total: R$ {getTotalPaymentValue(paymentData).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
+                
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {activePaymentMethods.map((method) => (
+                      <div key={method.id} className="group">
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">
+                          {method.nome}
+                          {method.taxa_percentual > 0 && (
+                            <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                              Taxa: {method.taxa_percentual}%
+                            </span>
+                          )}
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm font-medium">R$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={paymentData[method.nome] || ''}
+                            onChange={(e) => setPaymentData(prev => ({
+                              ...prev,
+                              [method.nome]: e.target.value
+                            }))}
+                            className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm font-medium group-hover:border-green-300 transition-colors"
+                            placeholder="0,00"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center">
+                        <DollarSign className="w-5 h-5 text-green-600 mr-2" />
+                        <span className="font-semibold text-green-800">Total das Formas de Pagamento</span>
+                      </div>
+                      <div className="text-lg font-bold text-green-700">
+                        R$ {getTotalPaymentValue(paymentData).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {/* Validation */}
-              <div className="flex items-center space-x-2">
+              <div className="p-4 rounded-xl border-2 border-dashed">
                 {isFormValid(channelData, paymentData, channelOrdersData) ? (
-                  <div className="flex items-center space-x-2 text-green-600">
-                    <Check className="w-5 h-5" />
-                    <span className="text-sm font-medium">Dados válidos!</span>
+                  <div className="flex items-center justify-center space-x-3 text-green-600 border-green-300 bg-green-50">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <Check className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-green-800">Dados válidos!</div>
+                      <div className="text-sm text-green-700">Os valores estão balanceados e prontos para salvar</div>
+                    </div>
                   </div>
                 ) : (
-                  <div className="flex items-center space-x-2 text-red-600">
-                    <AlertCircle className="w-5 h-5" />
-                    <span className="text-sm font-medium">
-                      Verifique se os totais de canais e formas de pagamento são iguais e se há pedidos informados
-                    </span>
+                  <div className="flex items-center justify-center space-x-3 text-red-600 border-red-300 bg-red-50">
+                    <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                      <AlertCircle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-red-800">Verifique os dados</div>
+                      <div className="text-sm text-red-700">
+                        Os totais de canais e formas de pagamento devem ser iguais
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
-              <button
-                onClick={() => setShowAddModal(false)}
-                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleAddSales}
-                disabled={!isFormValid(channelData, paymentData, channelOrdersData) || isSubmitting}
-                className="px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
-              >
-                {isSubmitting && (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                )}
-                <span>{isSubmitting ? 'Adicionando...' : 'Adicionar Vendas'}</span>
-              </button>
+            {/* Footer com botões */}
+            <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="px-6 py-3 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors font-medium"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleAddSales}
+                  disabled={!isFormValid(channelData, paymentData, channelOrdersData) || isSubmitting}
+                  className="px-6 py-3 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-lg font-medium hover:from-orange-700 hover:to-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center space-x-2 shadow-md hover:shadow-lg"
+                >
+                  {isSubmitting && (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  )}
+                  <span>{isSubmitting ? 'Adicionando...' : 'Adicionar Vendas'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1187,133 +1535,223 @@ export const SalesPage: React.FC = () => {
       {/* Edit Sales Modal */}
       {showEditModal && editingLaunch && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
+          <div className="bg-white rounded-xl shadow-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900">Editar Lançamento</h2>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">Editar Lançamento</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Edite os dados do lançamento de <span className="font-semibold text-blue-600">{new Date(editingLaunch.data + 'T00:00:00').toLocaleDateString('pt-BR', { 
+                      weekday: 'long', 
+                      day: '2-digit', 
+                      month: 'long', 
+                      year: 'numeric' 
+                    })}</span>
+                  </p>
+                </div>
                 <button
                   onClick={() => setShowEditModal(false)}
-                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-white hover:shadow-md rounded-lg transition-all duration-200"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-6 h-6" />
                 </button>
               </div>
-              <p className="text-sm text-gray-600 mt-2">
-                Edite os dados do lançamento de {new Date(editingLaunch.data + 'T00:00:00').toLocaleDateString('pt-BR')}.
-              </p>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-8">
+              {/* Resumo do Lançamento */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      R$ {editingLaunch.faturamento_total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-sm text-blue-700 font-medium">Faturamento Atual</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-purple-600">{editingLaunch.pedidos_total}</div>
+                    <div className="text-sm text-purple-700 font-medium">Pedidos Atuais</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      R$ {editingLaunch.ticket_medio.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                    <div className="text-sm text-green-700 font-medium">Ticket Médio Atual</div>
+                  </div>
+                </div>
+              </div>
+
               {/* Sales Channels */}
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-3 text-orange-700">Canais de Venda</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {activeChannels.map((channel) => (
-                    <div key={channel.id} className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">
-                        {channel.nome}
-                      </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={editChannelData[channel.nome] || ''}
-                          onChange={(e) => setEditChannelData(prev => ({
-                            ...prev,
-                            [channel.nome]: e.target.value
-                          }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="R$ 0,00"
-                        />
-                        <input
-                          type="number"
-                          value={editChannelOrdersData[channel.nome] || ''}
-                          onChange={(e) => setEditChannelOrdersData(prev => ({
-                            ...prev,
-                            [channel.nome]: e.target.value
-                          }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Qtd pedidos"
-                        />
+              <div className="bg-white rounded-xl border border-orange-200 shadow-sm">
+                <div className="p-4 bg-gradient-to-r from-orange-50 to-red-50 rounded-t-xl border-b border-orange-200">
+                  <h3 className="text-lg font-semibold text-orange-800 flex items-center">
+                    <ShoppingCart className="w-5 h-5 mr-2" />
+                    Canais de Venda
+                  </h3>
+                  <p className="text-sm text-orange-700 mt-1">Distribua o faturamento entre os canais utilizados</p>
+                </div>
+                
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {activeChannels.map((channel) => (
+                      <div key={channel.id} className="group">
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">
+                          {channel.nome}
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm font-medium">R$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={editChannelData[channel.nome] ? parseFloat(editChannelData[channel.nome]).toFixed(2) : ''}
+                              onChange={(e) => setEditChannelData(prev => ({
+                                ...prev,
+                                [channel.nome]: e.target.value
+                              }))}
+                              className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm font-medium group-hover:border-orange-300 transition-colors"
+                              placeholder="0,00"
+                            />
+                          </div>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              value={editChannelOrdersData[channel.nome] || ''}
+                              onChange={(e) => setEditChannelOrdersData(prev => ({
+                                ...prev,
+                                [channel.nome]: e.target.value
+                              }))}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm font-medium group-hover:border-orange-300 transition-colors"
+                              placeholder="Qtd pedidos"
+                            />
+                            <span className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-xs">pedidos</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="mt-6 p-4 bg-orange-50 rounded-lg border border-orange-200">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center">
+                        <TrendingUp className="w-5 h-5 text-orange-600 mr-2" />
+                        <span className="font-semibold text-orange-800">Totais dos Canais</span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-bold text-orange-700">
+                          R$ {getTotalChannelValue(editChannelData).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                        <div className="text-sm text-orange-600">
+                          {getTotalChannelOrders(editChannelOrdersData)} pedidos
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-                <div className="mt-2 flex justify-between text-sm">
-                  <span className="font-medium text-orange-700">
-                    Total Faturamento: R$ {getTotalChannelValue(editChannelData).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                  <span className="font-medium text-orange-700">
-                    Total Pedidos: {getTotalChannelOrders(editChannelOrdersData)}
-                  </span>
+                  </div>
                 </div>
               </div>
 
               {/* Payment Methods */}
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-3 text-green-700">Formas de Pagamento</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {activePaymentMethods.map((method) => (
-                    <div key={method.id}>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {method.nome}
-                      </label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={editPaymentData[method.nome] || ''}
-                        onChange={(e) => setEditPaymentData(prev => ({
-                          ...prev,
-                          [method.nome]: e.target.value
-                        }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="R$ 0,00"
-                      />
-                    </div>
-                  ))}
+              <div className="bg-white rounded-xl border border-green-200 shadow-sm">
+                <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-t-xl border-b border-green-200">
+                  <h3 className="text-lg font-semibold text-green-800 flex items-center">
+                    <DollarSign className="w-5 h-5 mr-2" />
+                    Formas de Pagamento
+                  </h3>
+                  <p className="text-sm text-green-700 mt-1">Distribua o faturamento entre as formas de pagamento</p>
                 </div>
-                <div className="mt-2 text-right">
-                  <span className="text-sm font-medium text-green-700">
-                    Total: R$ {getTotalPaymentValue(editPaymentData).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
+                
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {activePaymentMethods.map((method) => (
+                      <div key={method.id} className="group">
+                        <label className="block text-sm font-semibold text-gray-700 mb-3">
+                          {method.nome}
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm font-medium">R$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editPaymentData[method.nome] ? parseFloat(editPaymentData[method.nome]).toFixed(2) : ''}
+                            onChange={(e) => setEditPaymentData(prev => ({
+                              ...prev,
+                              [method.nome]: e.target.value
+                            }))}
+                            className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent text-sm font-medium group-hover:border-green-300 transition-colors"
+                            placeholder="0,00"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center">
+                        <DollarSign className="w-5 h-5 text-green-600 mr-2" />
+                        <span className="font-semibold text-green-800">Total das Formas de Pagamento</span>
+                      </div>
+                      <div className="text-lg font-bold text-green-700">
+                        R$ {getTotalPaymentValue(editPaymentData).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
               {/* Validation */}
-              <div className="flex items-center space-x-2">
+              <div className="p-4 rounded-xl border-2 border-dashed">
                 {isFormValid(editChannelData, editPaymentData, editChannelOrdersData) ? (
-                  <div className="flex items-center space-x-2 text-green-600">
-                    <Check className="w-5 h-5" />
-                    <span className="text-sm font-medium">Dados válidos!</span>
+                  <div className="flex items-center justify-center space-x-3 text-green-600 border-green-300 bg-green-50">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <Check className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-green-800">Dados válidos!</div>
+                      <div className="text-sm text-green-700">Os valores estão balanceados e prontos para salvar</div>
+                    </div>
                   </div>
                 ) : (
-                  <div className="flex items-center space-x-2 text-red-600">
-                    <AlertCircle className="w-5 h-5" />
-                    <span className="text-sm font-medium">
-                      Verifique se os totais de canais e formas de pagamento são iguais e se há pedidos informados
-                    </span>
+                  <div className="flex items-center justify-center space-x-3 text-red-600 border-red-300 bg-red-50">
+                    <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                      <AlertCircle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-red-800">Verifique os dados</div>
+                      <div className="text-sm text-red-700">
+                        Os totais de canais e formas de pagamento devem ser iguais
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="p-6 border-t border-gray-200 flex justify-end space-x-3">
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleUpdateLaunch}
-                disabled={!isFormValid(editChannelData, editPaymentData, editChannelOrdersData) || isSubmitting}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center space-x-2"
-              >
-                {isSubmitting && (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                )}
-                <span>{isSubmitting ? 'Salvando...' : 'Salvar Alterações'}</span>
-              </button>
+            {/* Footer com botões */}
+            <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+              <div className="flex justify-between items-center">
+                <div className="text-sm text-gray-600">
+                  Lançamento criado em {new Date(editingLaunch.created_at).toLocaleDateString('pt-BR')} às {new Date(editingLaunch.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setShowEditModal(false)}
+                    className="px-6 py-3 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 transition-colors font-medium"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleUpdateLaunch}
+                    disabled={!isFormValid(editChannelData, editPaymentData, editChannelOrdersData) || isSubmitting}
+                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center space-x-2 shadow-md hover:shadow-lg"
+                  >
+                    {isSubmitting && (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    )}
+                    <span>{isSubmitting ? 'Salvando...' : 'Salvar Alterações'}</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

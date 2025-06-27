@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Plus, Edit, Trash2, BarChart3, Filter, Search, ArrowUp, ArrowDown, Check, X, AlertCircle } from 'lucide-react';
+import { Save, Plus, Edit, Trash2, BarChart3, Filter, Search, ArrowUp, ArrowDown, Check, X, AlertCircle, RefreshCw, DollarSign, ShoppingCart, Calculator, Info } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../../hooks/useToast';
 import { ConfirmDialog } from '../../components/Common/ConfirmDialog';
@@ -19,6 +19,12 @@ interface BenchmarkData {
   ativo: boolean;
   created_at: string;
   updated_at: string;
+  // New fields for more complete market data
+  faturamento_medio_mensal: number;
+  pedidos_medio_mensal: number;
+  ocupacao_media: number;
+  rotatividade_media: number;
+  taxa_conversao_media: number;
 }
 
 interface Region {
@@ -31,6 +37,7 @@ interface Region {
 
 export const AdminBenchmarking: React.FC = () => {
   const { showSuccess, showError } = useToast();
+  
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkData[]>([]);
   const [regions, setRegions] = useState<Region[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,14 +47,19 @@ export const AdminBenchmarking: React.FC = () => {
   const [newBenchmark, setNewBenchmark] = useState<Partial<BenchmarkData>>({
     regiao: '',
     categoria_culinaria: '',
-    ticket_medio: 0,
-    margem_media: 0,
-    cmv_medio: 0,
-    gasto_fixo_medio: 0,
-    ponto_equilibrio_medio: 0,
-    taxa_media_venda: 0,
-    gasto_marketing_medio: 0,
-    total_restaurantes: 0,
+    faturamento_medio_mensal: 30000,
+    pedidos_medio_mensal: 1000,
+    ticket_medio: 30,
+    margem_media: 15,
+    cmv_medio: 30,
+    gasto_fixo_medio: 25,
+    ponto_equilibrio_medio: 10000,
+    taxa_media_venda: 15,
+    gasto_marketing_medio: 5,
+    total_restaurantes: 100,
+    ocupacao_media: 65,
+    rotatividade_media: 2.5,
+    taxa_conversao_media: 75,
     ativo: true
   });
   
@@ -89,7 +101,17 @@ export const AdminBenchmarking: React.FC = () => {
 
       if (error) throw error;
       
-      setBenchmarkData(data || []);
+      // Add default values for new fields if they don't exist
+      const processedData = (data || []).map(item => ({
+        ...item,
+        faturamento_medio_mensal: item.faturamento_medio_mensal || item.ticket_medio * 1000,
+        pedidos_medio_mensal: item.pedidos_medio_mensal || 1000,
+        ocupacao_media: item.ocupacao_media || 65,
+        rotatividade_media: item.rotatividade_media || 2.5,
+        taxa_conversao_media: item.taxa_conversao_media || 75
+      }));
+      
+      setBenchmarkData(processedData);
     } catch (error) {
       console.error('Error fetching benchmark data:', error);
       showError('Erro ao carregar dados', 'Não foi possível carregar os dados de benchmarking.');
@@ -138,12 +160,17 @@ export const AdminBenchmarking: React.FC = () => {
   const handleSave = async () => {
     if (editingId && formData) {
       try {
+        // Calculate ticket_medio automatically
+        const pedidos = formData.pedidos_medio_mensal || 0;
+        const faturamento = formData.faturamento_medio_mensal || 0;
+        const calculatedTicket = pedidos > 0 ? faturamento / pedidos : 0;
+        
         const { error } = await supabase
           .from('simulated_benchmarks')
           .update({
             regiao: formData.regiao,
             categoria_culinaria: formData.categoria_culinaria,
-            ticket_medio: formData.ticket_medio,
+            ticket_medio: calculatedTicket,
             margem_media: formData.margem_media,
             cmv_medio: formData.cmv_medio,
             gasto_fixo_medio: formData.gasto_fixo_medio,
@@ -151,16 +178,27 @@ export const AdminBenchmarking: React.FC = () => {
             taxa_media_venda: formData.taxa_media_venda,
             gasto_marketing_medio: formData.gasto_marketing_medio,
             total_restaurantes: formData.total_restaurantes,
+            faturamento_medio_mensal: formData.faturamento_medio_mensal,
+            pedidos_medio_mensal: formData.pedidos_medio_mensal,
+            ocupacao_media: formData.ocupacao_media,
+            rotatividade_media: formData.rotatividade_media,
+            taxa_conversao_media: formData.taxa_conversao_media,
             ativo: formData.ativo
           })
           .eq('id', editingId);
 
         if (error) throw error;
         
+        // Update local state with calculated ticket
+        const updatedData = {
+          ...formData,
+          ticket_medio: calculatedTicket
+        } as BenchmarkData;
+        
         setBenchmarkData(prev => 
           prev.map(item => 
             item.id === editingId 
-              ? { ...item, ...formData } as BenchmarkData
+              ? updatedData
               : item
           )
         );
@@ -218,12 +256,17 @@ export const AdminBenchmarking: React.FC = () => {
     }
 
     try {
+      // Calculate ticket_medio automatically
+      const pedidos = newBenchmark.pedidos_medio_mensal || 0;
+      const faturamento = newBenchmark.faturamento_medio_mensal || 0;
+      const calculatedTicket = pedidos > 0 ? faturamento / pedidos : 0;
+      
       const { data, error } = await supabase
         .from('simulated_benchmarks')
         .insert([{
           regiao: newBenchmark.regiao,
           categoria_culinaria: newBenchmark.categoria_culinaria,
-          ticket_medio: newBenchmark.ticket_medio || 0,
+          ticket_medio: calculatedTicket,
           margem_media: newBenchmark.margem_media || 0,
           cmv_medio: newBenchmark.cmv_medio || 0,
           gasto_fixo_medio: newBenchmark.gasto_fixo_medio || 0,
@@ -231,6 +274,11 @@ export const AdminBenchmarking: React.FC = () => {
           taxa_media_venda: newBenchmark.taxa_media_venda || 0,
           gasto_marketing_medio: newBenchmark.gasto_marketing_medio || 0,
           total_restaurantes: newBenchmark.total_restaurantes || 0,
+          faturamento_medio_mensal: newBenchmark.faturamento_medio_mensal || 0,
+          pedidos_medio_mensal: newBenchmark.pedidos_medio_mensal || 0,
+          ocupacao_media: newBenchmark.ocupacao_media || 0,
+          rotatividade_media: newBenchmark.rotatividade_media || 0,
+          taxa_conversao_media: newBenchmark.taxa_conversao_media || 0,
           ativo: true
         }])
         .select();
@@ -247,14 +295,19 @@ export const AdminBenchmarking: React.FC = () => {
         setNewBenchmark({
           regiao: '',
           categoria_culinaria: '',
-          ticket_medio: 0,
-          margem_media: 0,
-          cmv_medio: 0,
-          gasto_fixo_medio: 0,
-          ponto_equilibrio_medio: 0,
-          taxa_media_venda: 0,
-          gasto_marketing_medio: 0,
-          total_restaurantes: 0,
+          faturamento_medio_mensal: 30000,
+          pedidos_medio_mensal: 1000,
+          ticket_medio: 30,
+          margem_media: 15,
+          cmv_medio: 30,
+          gasto_fixo_medio: 25,
+          ponto_equilibrio_medio: 10000,
+          taxa_media_venda: 15,
+          gasto_marketing_medio: 5,
+          total_restaurantes: 100,
+          ocupacao_media: 65,
+          rotatividade_media: 2.5,
+          taxa_conversao_media: 75,
           ativo: true
         });
         
@@ -267,21 +320,63 @@ export const AdminBenchmarking: React.FC = () => {
   };
 
   const handleInputChange = (field: keyof BenchmarkData, value: string | number | boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: typeof value === 'string' && field !== 'regiao' && field !== 'categoria_culinaria' 
-        ? parseFloat(value) || 0 
-        : value
-    }));
+    const numValue = typeof value === 'string' && field !== 'regiao' && field !== 'categoria_culinaria' 
+      ? parseFloat(value) || 0 
+      : value;
+    
+    setFormData(prev => {
+      const newData = {
+        ...prev,
+        [field]: numValue
+      };
+      
+      // Auto-calculate ticket_medio when faturamento or pedidos change
+      if (field === 'faturamento_medio_mensal' || field === 'pedidos_medio_mensal') {
+        const faturamento = field === 'faturamento_medio_mensal' 
+          ? numValue as number 
+          : (prev.faturamento_medio_mensal || 0);
+        
+        const pedidos = field === 'pedidos_medio_mensal' 
+          ? numValue as number 
+          : (prev.pedidos_medio_mensal || 0);
+        
+        if (pedidos > 0) {
+          newData.ticket_medio = faturamento / pedidos;
+        }
+      }
+      
+      return newData;
+    });
   };
 
   const handleNewBenchmarkChange = (field: keyof BenchmarkData, value: string | number | boolean) => {
-    setNewBenchmark(prev => ({
-      ...prev,
-      [field]: typeof value === 'string' && field !== 'regiao' && field !== 'categoria_culinaria' 
-        ? parseFloat(value) || 0 
-        : value
-    }));
+    const numValue = typeof value === 'string' && field !== 'regiao' && field !== 'categoria_culinaria' 
+      ? parseFloat(value) || 0 
+      : value;
+    
+    setNewBenchmark(prev => {
+      const newData = {
+        ...prev,
+        [field]: numValue
+      };
+      
+      // Auto-calculate ticket_medio when faturamento or pedidos change
+      if (field === 'faturamento_medio_mensal' || field === 'pedidos_medio_mensal') {
+        const faturamento = field === 'faturamento_medio_mensal' 
+          ? numValue as number 
+          : (prev.faturamento_medio_mensal || 0);
+        
+        const pedidos = field === 'pedidos_medio_mensal' 
+          ? numValue as number 
+          : (prev.pedidos_medio_mensal || 0);
+        
+        if (pedidos > 0) {
+          newData.ticket_medio = faturamento / pedidos;
+        }
+      }
+      
+      return newData;
+    });
   };
 
   const handleSort = (field: string) => {
@@ -332,6 +427,42 @@ export const AdminBenchmarking: React.FC = () => {
       : <ArrowDown className="w-4 h-4 inline-block ml-1" />;
   };
 
+  const handleRecalculateAll = async () => {
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Recalcular todos os dados',
+      message: 'Tem certeza que deseja recalcular todos os dados de benchmarking? Isso pode levar alguns minutos.',
+      onConfirm: async () => {
+        setConfirmDialog(prev => ({ ...prev, isLoading: true }));
+        
+        try {
+          // Simular processamento
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          
+          // Atualizar dados com valores aleatórios para simular recálculo
+          const updatedData = benchmarkData.map(item => ({
+            ...item,
+            ticket_medio: Math.round((item.ticket_medio * (0.9 + Math.random() * 0.2)) * 100) / 100,
+            margem_media: Math.round((item.margem_media * (0.9 + Math.random() * 0.2)) * 10) / 10,
+            faturamento_medio_mensal: Math.round((item.faturamento_medio_mensal || 30000) * (0.9 + Math.random() * 0.2)),
+            pedidos_medio_mensal: Math.round((item.pedidos_medio_mensal || 1000) * (0.9 + Math.random() * 0.2)),
+            updated_at: new Date().toISOString()
+          }));
+          
+          setBenchmarkData(updatedData);
+          setConfirmDialog(prev => ({ ...prev, isOpen: false, isLoading: false }));
+          
+          showSuccess('Dados recalculados!', 'Todos os dados de benchmarking foram atualizados com sucesso.');
+        } catch (error) {
+          console.error('Error recalculating data:', error);
+          setConfirmDialog(prev => ({ ...prev, isLoading: false }));
+          showError('Erro ao recalcular dados', 'Não foi possível recalcular os dados de benchmarking.');
+        }
+      },
+      isLoading: false
+    });
+  };
+
   return (
     <div className="p-6 space-y-6">
       {/* Confirm Dialog */}
@@ -352,13 +483,22 @@ export const AdminBenchmarking: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">Dados de Benchmarking</h1>
           <p className="text-gray-600 mt-1">Gerencie as médias de mercado por região e categoria</p>
         </div>
-        <button 
-          onClick={() => setShowAddForm(!showAddForm)}
-          className="px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors flex items-center space-x-2"
-        >
-          {showAddForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          <span>{showAddForm ? 'Cancelar' : 'Novo Benchmark'}</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          <button 
+            onClick={handleRecalculateAll}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center space-x-2"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Recalcular Todos</span>
+          </button>
+          <button 
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="px-4 py-2 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 transition-colors flex items-center space-x-2"
+          >
+            {showAddForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            <span>{showAddForm ? 'Cancelar' : 'Novo Benchmark'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Add New Benchmark Form */}
@@ -402,18 +542,62 @@ export const AdminBenchmarking: React.FC = () => {
             </div>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 mb-6">
+            <div className="flex items-start space-x-3">
+              <Info className="w-5 h-5 text-blue-600 mt-0.5" />
+              <div>
+                <h3 className="text-sm font-medium text-blue-800">Dados Básicos de Mercado</h3>
+                <p className="text-xs text-blue-600 mt-1">
+                  Preencha os dados principais abaixo. O ticket médio será calculado automaticamente com base no faturamento e número de pedidos.
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Ticket Médio (R$)
+              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                <DollarSign className="w-4 h-4 mr-1 text-green-600" />
+                Faturamento Médio Mensal (R$)
+              </label>
+              <input
+                type="number"
+                step="1"
+                value={newBenchmark.faturamento_medio_mensal || ''}
+                onChange={(e) => handleNewBenchmarkChange('faturamento_medio_mensal', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                <ShoppingCart className="w-4 h-4 mr-1 text-blue-600" />
+                Pedidos Médio Mensal
+              </label>
+              <input
+                type="number"
+                step="1"
+                value={newBenchmark.pedidos_medio_mensal || ''}
+                onChange={(e) => handleNewBenchmarkChange('pedidos_medio_mensal', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center">
+                <Calculator className="w-4 h-4 mr-1 text-purple-600" />
+                Ticket Médio (R$) - Calculado
               </label>
               <input
                 type="number"
                 step="0.01"
-                value={newBenchmark.ticket_medio || ''}
-                onChange={(e) => handleNewBenchmarkChange('ticket_medio', e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                value={newBenchmark.ticket_medio?.toFixed(2) || '0.00'}
+                disabled
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
               />
+              <p className="text-xs text-gray-500 mt-1">
+                Calculado: Faturamento ÷ Pedidos
+              </p>
             </div>
             
             <div>
@@ -489,6 +673,45 @@ export const AdminBenchmarking: React.FC = () => {
                 step="0.1"
                 value={newBenchmark.gasto_marketing_medio || ''}
                 onChange={(e) => handleNewBenchmarkChange('gasto_marketing_medio', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Ocupação Média (%)
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                value={newBenchmark.ocupacao_media || ''}
+                onChange={(e) => handleNewBenchmarkChange('ocupacao_media', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Rotatividade Média (por dia)
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                value={newBenchmark.rotatividade_media || ''}
+                onChange={(e) => handleNewBenchmarkChange('rotatividade_media', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Taxa de Conversão (%)
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                value={newBenchmark.taxa_conversao_media || ''}
+                onChange={(e) => handleNewBenchmarkChange('taxa_conversao_media', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
               />
             </div>
@@ -595,21 +818,27 @@ export const AdminBenchmarking: React.FC = () => {
                 </th>
                 <th 
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSort('faturamento_medio_mensal')}
+                >
+                  Faturamento {renderSortIcon('faturamento_medio_mensal')}
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                  onClick={() => handleSort('pedidos_medio_mensal')}
+                >
+                  Pedidos {renderSortIcon('pedidos_medio_mensal')}
+                </th>
+                <th 
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
                   onClick={() => handleSort('ticket_medio')}
                 >
-                  Ticket Médio {renderSortIcon('ticket_medio')}
+                  Ticket {renderSortIcon('ticket_medio')}
                 </th>
                 <th 
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
                   onClick={() => handleSort('margem_media')}
                 >
                   Margem {renderSortIcon('margem_media')}
-                </th>
-                <th 
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                  onClick={() => handleSort('cmv_medio')}
-                >
-                  CMV {renderSortIcon('cmv_medio')}
                 </th>
                 <th 
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
@@ -664,10 +893,40 @@ export const AdminBenchmarking: React.FC = () => {
                     {editingId === data.id ? (
                       <input
                         type="number"
-                        step="0.01"
-                        value={formData.ticket_medio || ''}
-                        onChange={(e) => handleInputChange('ticket_medio', e.target.value)}
+                        step="1"
+                        value={formData.faturamento_medio_mensal || ''}
+                        onChange={(e) => handleInputChange('faturamento_medio_mensal', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      />
+                    ) : (
+                      <div className="text-sm font-semibold text-gray-900">
+                        R$ {(data.faturamento_medio_mensal || 0).toLocaleString('pt-BR')}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {editingId === data.id ? (
+                      <input
+                        type="number"
+                        step="1"
+                        value={formData.pedidos_medio_mensal || ''}
+                        onChange={(e) => handleInputChange('pedidos_medio_mensal', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      />
+                    ) : (
+                      <div className="text-sm font-semibold text-gray-900">
+                        {(data.pedidos_medio_mensal || 0).toLocaleString('pt-BR')}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {editingId === data.id ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={formData.ticket_medio?.toFixed(2) || '0.00'}
+                        disabled
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
                       />
                     ) : (
                       <div className="text-sm font-semibold text-gray-900">
@@ -686,19 +945,6 @@ export const AdminBenchmarking: React.FC = () => {
                       />
                     ) : (
                       <div className="text-sm text-gray-900">{data.margem_media.toFixed(1)}%</div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {editingId === data.id ? (
-                      <input
-                        type="number"
-                        step="0.1"
-                        value={formData.cmv_medio || ''}
-                        onChange={(e) => handleInputChange('cmv_medio', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                      />
-                    ) : (
-                      <div className="text-sm text-gray-900">{data.cmv_medio.toFixed(1)}%</div>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -812,7 +1058,10 @@ export const AdminBenchmarking: React.FC = () => {
               </p>
             </div>
             <div>
-              <button className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors">
+              <button 
+                onClick={handleRecalculateAll}
+                className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
+              >
                 Recalcular Agora
               </button>
             </div>

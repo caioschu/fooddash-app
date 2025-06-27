@@ -17,6 +17,7 @@ interface Restaurant {
   created_at: string;
   users: {
     email: string;
+    nome_completo?: string;
   };
 }
 
@@ -57,28 +58,70 @@ export const AdminRestaurants: React.FC = () => {
   const fetchRestaurants = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase
+      console.log('🔍 Iniciando busca de restaurantes...');
+      
+      // 1. Buscar todos os restaurantes
+      const { data: restaurantsData, error: restaurantsError } = await supabase
         .from('restaurants')
-        .select(`
-          *,
-          users (
-            email
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      
-      setRestaurants(data || []);
+      if (restaurantsError) {
+        console.error('❌ Erro ao buscar restaurantes:', restaurantsError);
+        throw restaurantsError;
+      }
+
+      if (!restaurantsData || restaurantsData.length === 0) {
+        console.log('⚠️ Nenhum restaurante encontrado');
+        setRestaurants([]);
+        setCategories([]);
+        setLocations([]);
+        return;
+      }
+
+      console.log('✅ Restaurantes encontrados:', restaurantsData.length);
+
+      // 2. Buscar todos os usuários da tabela users
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, email, tipo_usuario');
+
+      if (usersError) {
+        console.error('❌ Erro ao buscar usuários:', usersError);
+      } else {
+        console.log('✅ Usuários encontrados:', usersData?.length || 0);
+      }
+
+      // 3. Combinar dados manualmente
+      const restaurantsWithEmails = restaurantsData.map(restaurant => {
+        // Procurar o usuário correspondente
+        const user = usersData?.find(u => u.id === restaurant.user_id);
+        
+        console.log(`🔍 Restaurante ${restaurant.nome} - user_id: ${restaurant.user_id} - Email encontrado: ${user?.email || 'NÃO ENCONTRADO'}`);
+        
+        return {
+          ...restaurant,
+          users: user ? { 
+            email: user.email
+          } : { 
+            email: 'Email não encontrado'
+          }
+        };
+      });
+
+      console.log('✅ Restaurantes processados com emails:', restaurantsWithEmails);
+
+      setRestaurants(restaurantsWithEmails);
       
       // Extract unique categories and locations
-      const uniqueCategories = [...new Set(data?.map(r => r.categoria_culinaria).filter(Boolean))];
-      const uniqueLocations = [...new Set(data?.map(r => `${r.cidade}, ${r.estado}`).filter(Boolean))];
+      const uniqueCategories = [...new Set(restaurantsData.map(r => r.categoria_culinaria).filter(Boolean))];
+      const uniqueLocations = [...new Set(restaurantsData.map(r => `${r.cidade}, ${r.estado}`).filter(Boolean))];
       
       setCategories(uniqueCategories);
       setLocations(uniqueLocations);
+      
     } catch (error) {
-      console.error('Error fetching restaurants:', error);
+      console.error('💥 Erro geral ao carregar restaurantes:', error);
       showError('Erro ao carregar restaurantes', 'Não foi possível carregar a lista de restaurantes.');
     } finally {
       setIsLoading(false);
